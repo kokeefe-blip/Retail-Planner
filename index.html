@@ -613,7 +613,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
 <main style="padding-top:calc(2.875rem + env(safe-area-inset-top))">
 
   <!-- HOME VIEW -->
-  <section id="home-view" class="max-w-[1200px] mx-auto px-3 md:px-4 py-5 md:py-8">
+  <section id="home-view" style="display:none" class="max-w-[1200px] mx-auto px-3 md:px-4 py-5 md:py-8">
     <div class="flex items-center justify-center gap-3 md:gap-6 mb-1 leading-none">
       <button onclick="shiftYear(-1)" class="text-stone-400 hover:text-stone-700 transition flex-shrink-0 no-print" style="font-size:clamp(1.5rem,4vw,3rem);line-height:1;-webkit-tap-highlight-color:transparent" title="Previous year">‹</button>
       <div class="hollow-year hy-home" id="home-year">2026</div>
@@ -1499,13 +1499,15 @@ function setSigninStatus(msg){
 
 function signOut(){
   if(!confirm('Sign out?'))return;
-  // Clear all app state first
+  // Clean up all live listeners
+  unloadAll();
+  if(S.listener){S.listener();S.listener=null;}
+  // Clear all app state
   S.booted=false;
   S.userId=null;
   S.fbReady=false;
   S.events=[];
-  if(S.listener){S.listener();S.listener=null;}
-  // Reset data stores
+  // Reset shared data stores to defaults
   KS.boards=[
     {id:'board-timbers',name:'Timbers',color:'#7a9e7e',columns:DEFAULT_COLUMNS()},
     {id:'board-thorns', name:'Thorns', color:'#d4856a',columns:DEFAULT_COLUMNS()},
@@ -1515,7 +1517,6 @@ function signOut(){
   PT.rows=[];
   setStatus('','work');
   S.auth.signOut().catch(console.error);
-  // onAuthStateChanged will fire and show login screen
 }
 
 function startLocalMode(){/* removed — Google sign-in required */}
@@ -2327,22 +2328,39 @@ function save(key){
     .catch(e=>{console.error(key,'save failed:',e);setStatus('Save error','err');});
 }
 
+/* Unsubscribe functions for live listeners — cleared on sign-out */
+const _storeUnsubs={};
+
 function loadAll(){
   Object.entries(STORES).forEach(([key,store])=>{
+    // Clear any existing listener for this store
+    if(_storeUnsubs[key]){_storeUnsubs[key]();delete _storeUnsubs[key];}
+
     if(S.localMode){
       const d=S.localStore[store.local];
       if(d){store.set(d);store.after();}
       return;
     }
     if(!S.db||!S.userId)return;
-    S.db.doc(storePath(store)).get()
-      .then(snap=>{
+
+    // onSnapshot fires immediately with cached data, then again on network updates
+    // This eliminates the "pop-in" delay and keeps all users in sync in real-time
+    _storeUnsubs[key]=S.db.doc(storePath(store)).onSnapshot(
+      snap=>{
         if(snap.exists){
           store.set(snap.data());
           store.after();
         }
-      })
-      .catch(e=>console.error(key,'load failed:',e));
+      },
+      e=>console.error(key,'listener error:',e)
+    );
+  });
+}
+
+function unloadAll(){
+  Object.keys(_storeUnsubs).forEach(key=>{
+    _storeUnsubs[key]();
+    delete _storeUnsubs[key];
   });
 }
 
