@@ -712,7 +712,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
               class="save-input absolute inset-0 w-full h-full px-5 text-stone-800 bg-transparent"
               data-key="notes"
               placeholder="Notes for the day…"
-              style="font-size:.8125rem;line-height:1.75;padding-top:.75rem;padding-bottom:1rem;"
+              style="font-size:.8125rem;line-height:1.75;padding-top:.75rem;padding-bottom:1rem;background:#faf9f6;"
             ></textarea>
           </div>
         </div>
@@ -2441,6 +2441,7 @@ function showProjects(){
   document.getElementById('daily-view').style.display='none';
   document.getElementById('month-view').style.display='none';
   document.getElementById('planning-view').style.display='none';
+  document.getElementById('data-view').style.display='none';
   document.getElementById('projects-view').style.display='block';
   if(KS.activeBoardId)openBoard(KS.activeBoardId);
   else showBoardHome();
@@ -2570,14 +2571,16 @@ function renderBoardGrid(){
     let html=`<div class="board-card-accent" style="background:${board.color}"></div>`;
     html+=`<div class="board-card-name">${esc(board.name)}</div>`;
 
-    // Simple column counts — no progress bars or percentages
-    html+=`<div style="display:flex;flex-wrap:wrap;gap:.3rem .5rem;margin-bottom:.5rem">`;
     board.columns.forEach(col=>{
       const cnt=counts[col.id]||0;
-      html+=`<span style="font-size:.62rem;color:#a09a92"><span style="font-weight:700;color:#1a1814">${cnt}</span> ${esc(col.name)}</span>`;
+      html+=`<div class="board-stat">
+        <span class="board-stat-label">${esc(col.name)}</span>
+        <div style="display:flex;align-items:center;gap:.5rem;flex:1;margin-left:.75rem">
+          <div class="dash-bar-wrap"><div class="dash-bar" style="width:100%;background:#e8e4dc"></div></div>
+          <span class="board-stat-val">${cnt}</span>
+        </div>
+      </div>`;
     });
-    html+=`</div>`;
-    html+=`<div style="font-size:.6rem;color:#a09a92;margin-bottom:.25rem">${cards.length} project${cards.length!==1?'s':''} total</div>`;
 
     if(next){
       try{
@@ -2614,6 +2617,8 @@ function openBoard(boardId){
   KS.activeBoardId=boardId;
   KS.projectView='kanban';
   KS.filterTeam=null;
+  const pf=document.getElementById('proj-priority-filter');
+  if(pf)pf.value='';
   const board=activeBoard();
   document.getElementById('proj-home').style.display='none';
   document.getElementById('proj-board').style.display='';
@@ -2629,14 +2634,16 @@ function setProjectView(v){
   const kbBtn=document.getElementById('view-kanban-btn');
   const dBtn=document.getElementById('view-chart-btn');
   if(v==='kanban'){
-    kb.style.display='flex';dv.style.display='none';
-    kbBtn.classList.add('bg-stone-100','text-stone-600');kbBtn.classList.remove('text-stone-400');
-    dBtn.classList.remove('bg-stone-100','text-stone-600');dBtn.classList.add('text-stone-400');
+    if(kb)kb.style.display='flex';
+    if(dv)dv.style.display='none';
+    if(kbBtn){kbBtn.classList.add('bg-stone-100','text-stone-600');kbBtn.classList.remove('text-stone-400');}
+    if(dBtn){dBtn.classList.remove('bg-stone-100','text-stone-600');dBtn.classList.add('text-stone-400');}
     renderKanban();
   } else {
-    kb.style.display='none';dv.style.display='';
-    dBtn.classList.add('bg-stone-100','text-stone-600');dBtn.classList.remove('text-stone-400');
-    kbBtn.classList.remove('bg-stone-100','text-stone-600');kbBtn.classList.add('text-stone-400');
+    if(kb)kb.style.display='none';
+    if(dv)dv.style.display='';
+    if(dBtn){dBtn.classList.add('bg-stone-100','text-stone-600');dBtn.classList.remove('text-stone-400');}
+    if(kbBtn){kbBtn.classList.remove('bg-stone-100','text-stone-600');kbBtn.classList.add('text-stone-400');}
     renderDashboard();
   }
 }
