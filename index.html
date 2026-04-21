@@ -244,6 +244,13 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
 }
 .board-add-card:hover{background:#ede9e3;border-color:#b8b3a8}
 
+/* Board card drag-and-drop */
+.board-card.dragging{opacity:.4;transform:scale(.97);cursor:grabbing}
+.board-card.drag-over{box-shadow:0 0 0 2.5px #1a1814 inset;transform:translateY(-2px)}
+.board-card[draggable="true"]{cursor:grab}
+.board-drag-handle{position:absolute;top:.6rem;left:.65rem;color:#d4d0c8;cursor:grab;font-size:.8rem;line-height:1;padding:.1rem}
+.board-drag-handle:hover{color:#8a8a8a}
+
 /* dashboard */
 .dash-stat{background:#faf9f6;border:0.5px solid #e0ddd6;border-radius:10px;padding:1rem 1.25rem;text-align:center}
 .dash-stat-num{font-family:'Playfair Display',serif;font-size:2.2rem;font-weight:900;line-height:1;color:#1a1814}
@@ -866,6 +873,13 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
           <h2 class="font-serif font-bold text-xl text-stone-800">Projects</h2>
         </div>
         <div class="flex-1"></div>
+        <!-- Sort controls -->
+        <div class="flex items-center gap-1.5 no-print">
+          <span class="section-label">Sort:</span>
+          <button id="board-sort-manual" onclick="setBoardSort('manual')" class="px-2.5 py-1 rounded-md text-xs font-semibold transition dt-active">Manual</button>
+          <button id="board-sort-color"  onclick="setBoardSort('color')"  class="px-2.5 py-1 rounded-md text-xs font-semibold transition dt-inactive">Color</button>
+          <button id="board-sort-name"   onclick="setBoardSort('name')"   class="px-2.5 py-1 rounded-md text-xs font-semibold transition dt-inactive">Name</button>
+        </div>
         <button onclick="openBoardModal(null)" class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-900 text-white text-xs font-semibold hover:bg-stone-700 transition no-print">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New Board
@@ -1427,7 +1441,18 @@ function initFirebase(){
 
   try{
     firebase.initializeApp(FIREBASE_CONFIG);
-    S.db=firebase.firestore();S.auth=firebase.auth();
+    S.db=firebase.firestore();
+    // Enable offline persistence — caches data on mobile and desktop
+    S.db.enablePersistence({synchronizeTabs:true})
+      .catch(e=>{
+        if(e.code==='failed-precondition'){
+          // Multiple tabs open — persistence only in one tab, that's OK
+        } else if(e.code==='unimplemented'){
+          // Browser doesn't support it — still works online
+          console.warn('Offline persistence not available in this browser');
+        }
+      });
+    S.auth=firebase.auth();
     S.storage=firebase.storage();
 
     // If already signed in from a previous session, boot immediately
@@ -2215,14 +2240,17 @@ function handleCSVDrop(e){
 
 /* ══════════════════════════════════════════════════════════════
    PERSISTENCE REGISTRY
-   Every data store registers here. Adding a new page/feature:
-   1. Add an entry to STORES below
+   shared:true  → /artifacts/{APP_ID}/shared/{path}   (all users)
+   shared:false → /artifacts/{APP_ID}/users/{uid}/{path} (private)
+
+   Adding a new page/feature:
+   1. Add entry to STORES with shared:true or false
    2. Call save('key') whenever data changes
    3. loadAll() in boot() picks it up automatically
-   Path pattern: /artifacts/{APP_ID}/users/{uid}/{path}
 ══════════════════════════════════════════════════════════════ */
 const STORES={
   events:{
+    shared: true,
     path:  'events/list',
     local: '__events__',
     get:   ()=>({events:S.events}),
@@ -2235,6 +2263,7 @@ const STORES={
     }
   },
   kanban:{
+    shared: true,
     path:  'kanban/board',
     local: '__kanban__',
     get:   ()=>({
@@ -2251,6 +2280,7 @@ const STORES={
     after: ()=>{if(S.view==='projects')renderProjectsView();}
   },
   dataEntries:{
+    shared: true,
     path:  'data/entries',
     local: '__dataEntries__',
     get:   ()=>({entries:DR.entries}),
@@ -2258,6 +2288,7 @@ const STORES={
     after: ()=>{if(S.view==='data')renderDataPage();}
   },
   dataProducts:{
+    shared: true,
     path:  'data/products',
     local: '__ptRows__',
     get:   ()=>({rows:PT.rows}),
@@ -2266,13 +2297,29 @@ const STORES={
   },
 };
 
+/* Resolve Firestore path — shared or private */
+function storePath(store){
+  return store.shared
+    ? `/artifacts/${APP_ID}/shared/${store.path}`
+    : `/artifacts/${APP_ID}/users/${S.userId}/${store.path}`;
+}
+
 function save(key){
   const store=STORES[key];
   if(!store)return console.warn('Unknown store:',key);
   const data=store.get();
+
+  // Guard: Firestore max doc size is 1MB
+  const approxSize=JSON.stringify(data).length;
+  if(approxSize>900000){
+    console.warn(`Store '${key}' is ${Math.round(approxSize/1024)}KB — approaching Firestore 1MB limit`);
+    setStatus('Data too large to save','err');
+    return;
+  }
+
   if(S.localMode){S.localStore[store.local]=data;return;}
   if(!S.db||!S.userId)return;
-  S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/${store.path}`)
+  S.db.doc(storePath(store))
     .set(data,{merge:false})
     .then(()=>setStatus('Saved','ok'))
     .catch(e=>{console.error(key,'save failed:',e);setStatus('Save error','err');});
@@ -2283,10 +2330,11 @@ function loadAll(){
     if(S.localMode){
       const d=S.localStore[store.local];
       if(d)store.set(d);
+      store.after();
       return;
     }
     if(!S.db||!S.userId)return;
-    S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/${store.path}`).get()
+    S.db.doc(storePath(store)).get()
       .then(snap=>{
         if(snap.exists)store.set(snap.data());
         store.after();
@@ -2670,26 +2718,72 @@ function showBoardHome(){
   renderBoardGrid();
 }
 
+/* Board sort state */
+KS.boardSort='manual'; // 'manual' | 'color' | 'name'
+let _dragBoardId=null;
+
+function setBoardSort(mode){
+  KS.boardSort=mode;
+  ['manual','color','name'].forEach(m=>{
+    const el=document.getElementById('board-sort-'+m);
+    if(el)el.className='px-2.5 py-1 rounded-md text-xs font-semibold transition '+(m===mode?'dt-active':'dt-inactive');
+  });
+  renderBoardGrid();
+}
+
+function sortedBoards(){
+  const boards=[...KS.boards];
+  if(KS.boardSort==='color'){
+    // Sort by hue — convert hex to hue value
+    boards.sort((a,b)=>hexToHue(a.color)-hexToHue(b.color));
+  } else if(KS.boardSort==='name'){
+    boards.sort((a,b)=>a.name.localeCompare(b.name));
+  }
+  // 'manual' keeps KS.boards order as-is
+  return boards;
+}
+
+function hexToHue(hex){
+  try{
+    const r=parseInt(hex.slice(1,3),16)/255;
+    const g=parseInt(hex.slice(3,5),16)/255;
+    const b=parseInt(hex.slice(5,7),16)/255;
+    const max=Math.max(r,g,b),min=Math.min(r,g,b);
+    if(max===min)return 0;
+    let h;
+    const d=max-min;
+    if(max===r)h=(g-b)/d+(g<b?6:0);
+    else if(max===g)h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    return h*60;
+  }catch{return 0;}
+}
+
 function renderBoardGrid(){
   const grid=document.getElementById('board-grid');
   grid.innerHTML='';
-  KS.boards.forEach(board=>{
+
+  const boards=sortedBoards();
+
+  boards.forEach(board=>{
     const cards=boardCards(board.id);
     const counts={};board.columns.forEach(c=>{counts[c.id]=0;});
     cards.forEach(c=>{if(counts[c.colId]!==undefined)counts[c.colId]++;});
 
-    // Next upcoming due
-    const upcoming=cards.filter(c=>c.date).sort((a,b)=>a.date.localeCompare(b.date));
-    const next=upcoming.find(c=>{
-      try{return parseKey(c.date)>=new Date(new Date().setHours(0,0,0,0));}catch{return false;}
-    });
+    const next=cards.filter(c=>c.date).sort((a,b)=>a.date.localeCompare(b.date))
+      .find(c=>{try{return parseKey(c.date)>=new Date(new Date().setHours(0,0,0,0));}catch{return false;}});
 
     const div=document.createElement('div');
     div.className='board-card';
-    div.onclick=()=>openBoard(board.id);
+    div.dataset.boardId=board.id;
+    div.draggable=true;
 
     let html=`<div class="board-card-accent" style="background:${board.color}"></div>`;
-    html+=`<div class="board-card-name">${esc(board.name)}</div>`;
+    // Drag handle (only visible in manual sort)
+    if(KS.boardSort==='manual'){
+      html+=`<div class="board-drag-handle" title="Drag to reorder">⠿</div>`;
+    }
+    html+=`<div class="board-card-name" style="${KS.boardSort==='manual'?'padding-left:1.25rem':''}">${esc(board.name)}</div>`;
 
     board.columns.forEach(col=>{
       const cnt=counts[col.id]||0;
@@ -2721,6 +2815,44 @@ function renderBoardGrid(){
     </div>`;
 
     div.innerHTML=html;
+
+    // Click to open (but not if dragging)
+    div.addEventListener('click',()=>{if(!_dragBoardId)openBoard(board.id);});
+
+    // Drag events — only active in manual sort
+    div.addEventListener('dragstart',e=>{
+      if(KS.boardSort!=='manual'){e.preventDefault();return;}
+      _dragBoardId=board.id;
+      div.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+    });
+    div.addEventListener('dragend',()=>{
+      _dragBoardId=null;
+      div.classList.remove('dragging');
+      document.querySelectorAll('.board-card').forEach(el=>el.classList.remove('drag-over'));
+    });
+    div.addEventListener('dragover',e=>{
+      if(KS.boardSort!=='manual'||!_dragBoardId||_dragBoardId===board.id)return;
+      e.preventDefault();
+      document.querySelectorAll('.board-card').forEach(el=>el.classList.remove('drag-over'));
+      div.classList.add('drag-over');
+    });
+    div.addEventListener('dragleave',()=>div.classList.remove('drag-over'));
+    div.addEventListener('drop',e=>{
+      e.preventDefault();
+      div.classList.remove('drag-over');
+      if(!_dragBoardId||_dragBoardId===board.id||KS.boardSort!=='manual')return;
+      // Reorder in KS.boards
+      const fromIdx=KS.boards.findIndex(b=>b.id===_dragBoardId);
+      const toIdx=KS.boards.findIndex(b=>b.id===board.id);
+      if(fromIdx<0||toIdx<0)return;
+      const [moved]=KS.boards.splice(fromIdx,1);
+      KS.boards.splice(toIdx,0,moved);
+      _dragBoardId=null;
+      kbSave();
+      renderBoardGrid();
+    });
+
     grid.appendChild(div);
   });
 
