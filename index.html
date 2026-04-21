@@ -1811,7 +1811,7 @@ function wireInputs(){
 }
 
 function boot(){
-  buildSchedule();wireInputs();kbLoad();drLoad();ptLoad();
+  buildSchedule();wireInputs();loadAll();
   const today=new Date();
   S.current=today;S.calView=new Date(today.getFullYear(),today.getMonth(),1);
   syncPickers(today);
@@ -2184,12 +2184,104 @@ function handleCSVDrop(e){
   reader.readAsText(f);
 }
 
+/* ══════════════════════════════════════════════════════════════
+   PERSISTENCE REGISTRY
+   Every data store registers here. Adding a new page/feature:
+   1. Add an entry to STORES below
+   2. Call save('key') whenever data changes
+   3. loadAll() in boot() picks it up automatically
+   Path pattern: /artifacts/{APP_ID}/users/{uid}/{path}
+══════════════════════════════════════════════════════════════ */
+const STORES={
+  events:{
+    path:  'events/list',
+    local: '__events__',
+    get:   ()=>({events:S.events}),
+    set:   d=>{S.events=d.events||[];},
+    after: ()=>{
+      renderPlanningList();
+      if(S.view==='home')renderHomeGrid();
+      else if(S.view==='month')renderMonthGrid();
+      else if(S.view==='daily'){renderCalHeader();applyEventsToSchedule(S.current);}
+    }
+  },
+  kanban:{
+    path:  'kanban/board',
+    local: '__kanban__',
+    get:   ()=>({
+      boards:KS.boards,
+      cards:KS.cards.map(c=>({...c,
+        imgData:c.imgData&&!c.imgData.startsWith('data:')?c.imgData
+               :c.imgData&&c.imgData.length<500000?c.imgData:''
+      }))
+    }),
+    set:   d=>{
+      if(d.boards&&d.boards.length)KS.boards=d.boards;
+      KS.cards=d.cards||[];
+    },
+    after: ()=>{if(S.view==='projects')renderProjectsView();}
+  },
+  dataEntries:{
+    path:  'data/entries',
+    local: '__dataEntries__',
+    get:   ()=>({entries:DR.entries}),
+    set:   d=>{DR.entries=d.entries||[];},
+    after: ()=>{if(S.view==='data')renderDataPage();}
+  },
+  dataProducts:{
+    path:  'data/products',
+    local: '__ptRows__',
+    get:   ()=>({rows:PT.rows}),
+    set:   d=>{PT.rows=d.rows||[];},
+    after: ()=>{if(S.view==='data'&&DR.activeTab==='products')renderProductPage();}
+  },
+};
+
+function save(key){
+  const store=STORES[key];
+  if(!store)return console.warn('Unknown store:',key);
+  const data=store.get();
+  if(S.localMode){S.localStore[store.local]=data;return;}
+  if(!S.db||!S.userId)return;
+  S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/${store.path}`)
+    .set(data,{merge:false})
+    .then(()=>setStatus('Saved','ok'))
+    .catch(e=>{console.error(key,'save failed:',e);setStatus('Save error','err');});
+}
+
+function loadAll(){
+  Object.entries(STORES).forEach(([key,store])=>{
+    if(S.localMode){
+      const d=S.localStore[store.local];
+      if(d)store.set(d);
+      return;
+    }
+    if(!S.db||!S.userId)return;
+    S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/${store.path}`).get()
+      .then(snap=>{
+        if(snap.exists)store.set(snap.data());
+        store.after();
+      })
+      .catch(e=>console.error(key,'load failed:',e));
+  });
+}
+
+/* Legacy wrappers — keep these so all existing call sites work unchanged */
+function saveEvents()  {save('events');}
+function kbSave()      {save('kanban');}
+function drSave()      {save('dataEntries');}
+function ptSave()      {save('dataProducts');}
+
+function loadEvents()  {/* handled by loadAll */}
+function kbLoad()      {/* handled by loadAll */}
+function drLoad()      {/* handled by loadAll */}
+function ptLoad()      {/* handled by loadAll */}
+
 function ingestCSV(text){
   const rows=parseCSVText(text);
   const evts=rowsToEvents(rows);
   if(!evts.length){alert('No valid events found. Check your CSV format and try again.');return;}
 
-  // Ask only if there are already events loaded
   if(S.events.length){
     const choice=confirm(
       `You have ${S.events.length} existing event${S.events.length!==1?'s':''} loaded.\n\n`+
@@ -2197,10 +2289,8 @@ function ingestCSV(text){
       `Cancel = Add (merge new events in)`
     );
     if(choice){
-      // Overwrite
       S.events=evts;
     } else {
-      // Merge + dedupe
       S.events=[...S.events,...evts];
       const seen=new Set();
       S.events=S.events.filter(e=>{const k=e.date+'|'+e.team+'|'+e.subject;if(seen.has(k))return false;seen.add(k);return true;});
@@ -2209,6 +2299,7 @@ function ingestCSV(text){
     S.events=evts;
   }
 
+  saveEvents();
   renderPlanningList();
   if(S.view==='home')renderHomeGrid();
   else if(S.view==='month')renderMonthGrid();
@@ -2218,6 +2309,7 @@ function ingestCSV(text){
 function clearEvents(){
   if(!confirm('Remove all imported events?'))return;
   S.events=[];
+  saveEvents();
   renderPlanningList();
   if(S.view==='home')renderHomeGrid();
   else if(S.view==='month')renderMonthGrid();
@@ -2294,6 +2386,7 @@ function toggleEvtFilter(team){
 
 function removeEvent(idx){
   S.events.splice(idx,1);
+  saveEvents();
   renderPlanningList();
   if(S.view==='home')renderHomeGrid();
   else if(S.view==='month')renderMonthGrid();
@@ -2354,6 +2447,7 @@ function saveEvtModal(){
   e.subject=e.opponent?`${e.team} vs ${e.opponent}`:(e.promotion||e.team);
 
   closeEvtModal();
+  saveEvents();
   renderPlanningList();
   if(S.view==='home')renderHomeGrid();
   else if(S.view==='month')renderMonthGrid();
@@ -2364,6 +2458,7 @@ function deleteEvt(){
   if(_evtEditIdx<0)return;
   if(!confirm('Delete this event?'))return;
   S.events.splice(_evtEditIdx,1);
+  saveEvents();
   closeEvtModal();
   renderPlanningList();
   if(S.view==='home')renderHomeGrid();
@@ -2504,35 +2599,7 @@ function boardCards(boardId){return KS.cards.filter(c=>c.boardId===boardId);}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function teamColorFor(team){if(!team)return '#8a8a8a';return resolveColor('',team);}
 
-function kbSave(){
-  const data={boards:KS.boards,cards:KS.cards.map(c=>({...c,imgData:c.imgData||''}))
-    // Strip large base64 blobs from Firestore (keep only URLs or empty)
-    .map(c=>({...c,imgData:c.imgData&&!c.imgData.startsWith('data:')?c.imgData:c.imgData&&c.imgData.length<500000?c.imgData:''}))};
-  if(S.localMode){S.localStore.__kanban__=data;return;}
-  if(S.db&&S.userId)
-    S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/kanban/board`).set(data,{merge:true}).catch(console.error);
-}
-
-function kbLoad(){
-  if(S.localMode){
-    const d=S.localStore.__kanban__;
-    if(d){
-      if(d.boards&&d.boards.length)KS.boards=d.boards;
-      KS.cards=d.cards||[];
-    }
-    return;
-  }
-  if(!S.db||!S.userId)return;
-  S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/kanban/board`).get()
-    .then(snap=>{
-      if(snap.exists){
-        const d=snap.data();
-        if(d.boards&&d.boards.length)KS.boards=d.boards;
-        KS.cards=d.cards||[];
-      }
-      if(S.view==='projects')renderProjectsView();
-    }).catch(console.error);
-}
+/* kbSave / kbLoad now delegate to the STORES registry above */
 
 /* ══ PROJECT DEADLINE CALENDAR NOTIFICATIONS ══ */
 function getProjectNotifications(){
@@ -3379,20 +3446,7 @@ const DR={
 const TEAM_COLORS={Timbers:'#7a9e7e',Thorns:'#d4856a'};
 const CAT_LABELS={Event:'Event Sales',Ecomm:'Ecommerce',DarkDay:'Dark Day'};
 
-function drSave(){
-  const data={entries:DR.entries};
-  if(S.localMode){S.localStore.__dataEntries__=data;return;}
-  if(S.db&&S.userId)
-    S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/data/entries`).set(data,{merge:true}).catch(console.error);
-}
-
-function drLoad(){
-  if(S.localMode){const d=S.localStore.__dataEntries__;if(d)DR.entries=d.entries||[];return;}
-  if(!S.db||!S.userId)return;
-  S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/data/entries`).get()
-    .then(snap=>{if(snap.exists){DR.entries=snap.data().entries||[];}if(S.view==='data')renderDataPage();})
-    .catch(console.error);
-}
+/* drSave / drLoad delegate to STORES registry */
 
 function fmt$(n){if(!n&&n!==0)return '—';return '$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
 function fmtN(n){if(!n&&n!==0)return '—';return Number(n).toLocaleString();}
@@ -3782,19 +3836,7 @@ const PT={
   rows:[],   // raw parsed rows: {date,productType,variant,units,netSales,startInv,endInv,cogs}
 };
 
-function ptSave(){
-  if(S.localMode){S.localStore.__ptRows__=PT.rows;return;}
-  if(S.db&&S.userId)
-    S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/data/products`).set({rows:PT.rows},{merge:false}).catch(console.error);
-}
-
-function ptLoad(){
-  if(S.localMode){if(S.localStore.__ptRows__)PT.rows=S.localStore.__ptRows__;return;}
-  if(!S.db||!S.userId)return;
-  S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/data/products`).get()
-    .then(snap=>{if(snap.exists)PT.rows=snap.data().rows||[];if(S.view==='data'&&DR.activeTab==='products')renderProductPage();})
-    .catch(console.error);
-}
+/* ptSave / ptLoad delegate to STORES registry */
 
 /* Determine team from product type name */
 function ptTeam(productType){
