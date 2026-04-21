@@ -319,8 +319,8 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
 .sdot-init{background:#94a3b8;animation:blink 1.2s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
 
-#setup-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(237,233,227,.96);align-items:center;justify-content:center}
-#setup-overlay.visible{display:flex}
+#setup-overlay{display:flex;position:fixed;inset:0;z-index:500;background:rgba(237,233,227,.96);align-items:center;justify-content:center}
+#setup-overlay.hidden{display:none}
 
 .col-div{border-right:1px solid #e0ddd6}
 .row-div{border-bottom:1px solid #e0ddd6}
@@ -1420,7 +1420,8 @@ const S={
   evtFilter:null,
   userId:null,db:null,auth:null,storage:null,
   listener:null,saveTimer:null,
-  localMode:false,localStore:{},fbReady:false
+  localMode:false,localStore:{},fbReady:false,
+  booted:false
 };
 
 const fmtKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -1436,42 +1437,38 @@ function setStatus(t,type){
 }
 
 function initFirebase(){
-  // Always show sign-in screen first — hide once authenticated
-  document.getElementById('setup-overlay').classList.add('visible');
-
   try{
     firebase.initializeApp(FIREBASE_CONFIG);
-    S.db=firebase.firestore();
-    // Enable offline persistence — caches data on mobile and desktop
-    S.db.enablePersistence({synchronizeTabs:true})
-      .catch(e=>{
-        if(e.code==='failed-precondition'){
-          // Multiple tabs open — persistence only in one tab, that's OK
-        } else if(e.code==='unimplemented'){
-          // Browser doesn't support it — still works online
-          console.warn('Offline persistence not available in this browser');
-        }
-      });
     S.auth=firebase.auth();
+    S.db=firebase.firestore();
     S.storage=firebase.storage();
 
-    // If already signed in from a previous session, boot immediately
+    // Enable offline persistence — fire and forget, don't block auth
+    S.db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
+
     S.auth.onAuthStateChanged(user=>{
       if(user){
-        S.userId=user.uid;S.fbReady=true;
-        document.getElementById('setup-overlay').classList.remove('visible');
+        // Signed in
+        S.userId=user.uid;
+        S.fbReady=true;
+        document.getElementById('setup-overlay').classList.add('hidden');
         document.getElementById('signout-btn').style.display='';
         setStatus(user.displayName||'Signed in','ok');
-        if(!S._booted){S._booted=true;boot();}
+        if(!S.booted){
+          S.booted=true;
+          boot();
+        }
       } else {
+        // Signed out — show login screen
+        document.getElementById('setup-overlay').classList.remove('hidden');
         document.getElementById('signout-btn').style.display='none';
-        document.getElementById('setup-overlay').classList.add('visible');
         setSigninStatus('');
       }
     });
+
   }catch(e){
     console.error('Firebase init failed:',e);
-    setSigninStatus('Connection error. Check your internet connection.');
+    setSigninStatus('Connection error — check your internet and reload.');
   }
 }
 
@@ -1480,25 +1477,19 @@ function signInWithGoogle(){
   btn.disabled=true;
   btn.style.opacity='.6';
   setSigninStatus('Opening Google sign-in…');
+
   const provider=new firebase.auth.GoogleAuthProvider();
-  S.auth.signInWithPopup(provider)
-    .then(result=>{
-      setSigninStatus('Signed in as '+result.user.displayName);
-      // onAuthStateChanged will fire and boot the app
-    })
-    .catch(e=>{
-      console.warn('Sign-in error:',e.code);
-      btn.disabled=false;btn.style.opacity='1';
-      if(e.code==='auth/popup-blocked'){
-        setSigninStatus('Popup blocked — please allow popups for this site and try again.');
-      } else if(e.code==='auth/unauthorized-domain'){
-        setSigninStatus('This domain is not authorized. Add it in Firebase Console → Authentication → Authorized Domains.');
-      } else if(e.code==='auth/cancelled-popup-request'||e.code==='auth/popup-closed-by-user'){
-        setSigninStatus('Sign-in cancelled.');
-      } else {
-        setSigninStatus('Sign-in failed: '+e.message);
-      }
-    });
+  S.auth.signInWithPopup(provider).catch(e=>{
+    btn.disabled=false;
+    btn.style.opacity='1';
+    const msgs={
+      'auth/popup-blocked':    'Popup blocked — please allow popups for this site and try again.',
+      'auth/unauthorized-domain': 'Domain not authorized. Add it in Firebase Console → Authentication → Authorized Domains.',
+      'auth/popup-closed-by-user':'Sign-in cancelled.',
+      'auth/cancelled-popup-request':'Sign-in cancelled.',
+    };
+    setSigninStatus(msgs[e.code]||'Sign-in failed: '+e.message);
+  });
 }
 
 function setSigninStatus(msg){
@@ -1508,16 +1499,27 @@ function setSigninStatus(msg){
 
 function signOut(){
   if(!confirm('Sign out?'))return;
-  S.auth.signOut().then(()=>{
-    S._booted=false;
-    S.userId=null;S.fbReady=false;
-    setStatus('Signed out','work');
-  }).catch(console.error);
+  // Clear all app state first
+  S.booted=false;
+  S.userId=null;
+  S.fbReady=false;
+  S.events=[];
+  if(S.listener){S.listener();S.listener=null;}
+  // Reset data stores
+  KS.boards=[
+    {id:'board-timbers',name:'Timbers',color:'#7a9e7e',columns:DEFAULT_COLUMNS()},
+    {id:'board-thorns', name:'Thorns', color:'#d4856a',columns:DEFAULT_COLUMNS()},
+  ];
+  KS.cards=[];
+  DR.entries=[];
+  PT.rows=[];
+  setStatus('','work');
+  S.auth.signOut().catch(console.error);
+  // onAuthStateChanged will fire and show login screen
 }
 
-function startLocalMode(){/* removed — login required */}
+function startLocalMode(){/* removed — Google sign-in required */}
 
-S._booted=false;
 
 const docPath=d=>`/artifacts/${APP_ID}/users/${S.userId}/days/${fmtKey(d)}`;
 
@@ -2329,15 +2331,16 @@ function loadAll(){
   Object.entries(STORES).forEach(([key,store])=>{
     if(S.localMode){
       const d=S.localStore[store.local];
-      if(d)store.set(d);
-      store.after();
+      if(d){store.set(d);store.after();}
       return;
     }
     if(!S.db||!S.userId)return;
     S.db.doc(storePath(store)).get()
       .then(snap=>{
-        if(snap.exists)store.set(snap.data());
-        store.after();
+        if(snap.exists){
+          store.set(snap.data());
+          store.after();
+        }
       })
       .catch(e=>console.error(key,'load failed:',e));
   });
