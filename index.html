@@ -42,6 +42,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box}
@@ -708,11 +709,13 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
           <!-- Project deadline reminders (auto, not editable) -->
           <div id="proj-reminders" style="display:none;flex-shrink:0;border-bottom:1px solid #e0ddd6;padding:.4rem .75rem;background:#faf9f6"></div>
           <div class="dot-grid flex-1 relative" style="min-height:420px">
+            <!-- White strip covers dots behind the placeholder text only -->
+            <div style="position:absolute;top:0;left:0;right:0;height:2.2rem;background:#faf9f6;z-index:0"></div>
             <textarea
-              class="save-input absolute inset-0 w-full h-full px-5 text-stone-800 bg-transparent"
+              class="save-input absolute inset-0 w-full h-full px-5 text-stone-800"
               data-key="notes"
               placeholder="Notes for the day…"
-              style="font-size:.8125rem;line-height:1.75;padding-top:.75rem;padding-bottom:1rem;background:#faf9f6;"
+              style="font-size:.8125rem;line-height:1.75;padding-top:.75rem;padding-bottom:1rem;background:transparent;z-index:1;position:relative;"
             ></textarea>
           </div>
         </div>
@@ -878,9 +881,6 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
         </div>
         <div class="flex-1"></div>
         <!-- View toggle removed -->
-        <div style="display:none">
-          <button id="view-kanban-btn" onclick="setProjectView('kanban')" style="display:none"></button>
-        </div>
         <button onclick="openBoardModal(KS.activeBoardId)" class="text-xs text-stone-400 hover:text-stone-700 transition no-print" style="background:none;border:none;cursor:pointer;font-family:inherit">Edit board</button>
         <!-- CSV -->
         <label class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-semibold cursor-pointer hover:bg-stone-50 transition no-print">
@@ -1395,7 +1395,7 @@ const S={
   monthMonth:new Date().getMonth(),
   events:[],
   evtFilter:null,
-  userId:null,db:null,auth:null,
+  userId:null,db:null,auth:null,storage:null,
   listener:null,saveTimer:null,
   localMode:false,localStore:{},fbReady:false
 };
@@ -1416,26 +1416,48 @@ function initFirebase(){
   if(!FIREBASE_CONFIG.apiKey||FIREBASE_CONFIG.apiKey==='YOUR_API_KEY'){
     document.getElementById('setup-overlay').classList.add('visible');return;
   }
+  let booted=false;
+  function safeBoot(){
+    if(booted)return;
+    booted=true;
+    boot();
+  }
+  // Safety net: always boot within 5 seconds no matter what
+  const bootTimer=setTimeout(()=>{
+    if(!booted){
+      console.warn('Auth timeout — booting in local mode');
+      S.localMode=true;setStatus('Local','work');safeBoot();
+    }
+  },5000);
+
   try{
     firebase.initializeApp(FIREBASE_CONFIG);
     S.db=firebase.firestore();S.auth=firebase.auth();
+    S.storage=firebase.storage();
     const provider=new firebase.auth.GoogleAuthProvider();
     S.auth.onAuthStateChanged(user=>{
+      clearTimeout(bootTimer);
       if(user){
         S.userId=user.uid;S.fbReady=true;
         setStatus(user.displayName||'Signed in','ok');
-        boot();
+        safeBoot();
       } else {
         setStatus('Signing in…','work');
         S.auth.signInWithPopup(provider)
           .catch(e=>{
             console.warn('Google sign-in failed, trying anonymous:',e);
             S.auth.signInAnonymously()
-              .catch(()=>{S.localMode=true;setStatus('Local','work');boot();});
+              .catch(()=>{
+                clearTimeout(bootTimer);
+                S.localMode=true;setStatus('Local','work');safeBoot();
+              });
           });
       }
     });
-  }catch(e){console.warn(e);S.localMode=true;setStatus('Local','work');boot();}
+  }catch(e){
+    clearTimeout(bootTimer);
+    console.warn(e);S.localMode=true;setStatus('Local','work');safeBoot();
+  }
 }
 
 function startLocalMode(){
@@ -2483,7 +2505,9 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function teamColorFor(team){if(!team)return '#8a8a8a';return resolveColor('',team);}
 
 function kbSave(){
-  const data={boards:KS.boards,cards:KS.cards.map(c=>({...c,imgData:c.imgData||''}))};
+  const data={boards:KS.boards,cards:KS.cards.map(c=>({...c,imgData:c.imgData||''}))
+    // Strip large base64 blobs from Firestore (keep only URLs or empty)
+    .map(c=>({...c,imgData:c.imgData&&!c.imgData.startsWith('data:')?c.imgData:c.imgData&&c.imgData.length<500000?c.imgData:''}))};
   if(S.localMode){S.localStore.__kanban__=data;return;}
   if(S.db&&S.userId)
     S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/kanban/board`).set(data,{merge:true}).catch(console.error);
@@ -2631,19 +2655,13 @@ function setProjectView(v){
   KS.projectView=v;
   const kb=document.getElementById('kanban-board');
   const dv=document.getElementById('dashboard-view');
-  const kbBtn=document.getElementById('view-kanban-btn');
-  const dBtn=document.getElementById('view-chart-btn');
   if(v==='kanban'){
     if(kb)kb.style.display='flex';
     if(dv)dv.style.display='none';
-    if(kbBtn){kbBtn.classList.add('bg-stone-100','text-stone-600');kbBtn.classList.remove('text-stone-400');}
-    if(dBtn){dBtn.classList.remove('bg-stone-100','text-stone-600');dBtn.classList.add('text-stone-400');}
     renderKanban();
   } else {
     if(kb)kb.style.display='none';
     if(dv)dv.style.display='';
-    if(dBtn){dBtn.classList.add('bg-stone-100','text-stone-600');dBtn.classList.remove('text-stone-400');}
-    if(kbBtn){kbBtn.classList.remove('bg-stone-100','text-stone-600');kbBtn.classList.add('text-stone-400');}
     renderDashboard();
   }
 }
@@ -2991,12 +3009,31 @@ function deleteProject(){
 
 function handleProjectImage(e){
   const f=e.target.files[0];if(!f)return;
+
+  // Show preview immediately from local file
   const reader=new FileReader();
   reader.onload=ev=>{
-    _modalImgData=ev.target.result;
+    _modalImgData=ev.target.result; // temp base64 for preview
     const prev=document.getElementById('pf-img-preview');
     const clr=document.getElementById('pf-img-clear');
     prev.src=_modalImgData;prev.style.display='';clr.style.display='';
+    prev.title='Uploading…';
+
+    // Upload to Firebase Storage if available
+    if(S.storage&&S.userId&&!S.localMode){
+      const path=`users/${S.userId}/project-images/${Date.now()}-${f.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+      const ref=S.storage.ref(path);
+      ref.put(f).then(snap=>snap.ref.getDownloadURL()).then(url=>{
+        _modalImgData=url; // replace base64 with permanent URL
+        prev.src=url;
+        prev.title='';
+        setStatus('Image uploaded','ok');
+      }).catch(err=>{
+        console.warn('Storage upload failed, keeping base64:',err);
+        prev.title='';
+        setStatus('Image saved locally','work');
+      });
+    }
   };
   reader.readAsDataURL(f);
   e.target.value='';
