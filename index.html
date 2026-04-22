@@ -1458,10 +1458,8 @@ function initFirebase(){
     S.db=firebase.firestore();
     S.storage=firebase.storage();
 
-    // Enable offline persistence — fire and forget
-    S.db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
-
     S.auth.onAuthStateChanged(user=>{
+      clearTimeout(_authTimer);
       if(user){
         S.userId=user.uid;
         S.fbReady=true;
@@ -1480,6 +1478,16 @@ function initFirebase(){
         setSigninStatus('');
       }
     });
+
+    // Hard timeout — if auth doesn't resolve in 4s, force show the login screen
+    const _authTimer=setTimeout(()=>{
+      if(!S.booted&&!S.userId){
+        document.getElementById('setup-overlay').classList.remove('hidden');
+        document.getElementById('signin-panel').style.display='';
+        document.getElementById('loading-panel').style.display='none';
+        setSigninStatus('Tap "Sign in with Google" to continue.');
+      }
+    },4000);
 
   }catch(e){
     console.error('Firebase init failed:',e);
@@ -2349,7 +2357,6 @@ function save(key){
 /* Unsubscribe functions for live listeners — cleared on sign-out */
 const _storeUnsubs={};
 
-/* Migrate events from old per-user path to new shared path (one-time) */
 function loadAll(){
   Object.entries(STORES).forEach(([key,store])=>{
     if(_storeUnsubs[key]){_storeUnsubs[key]();delete _storeUnsubs[key];}
@@ -2361,15 +2368,25 @@ function loadAll(){
     }
     if(!S.db||!S.userId)return;
 
-    // onSnapshot fires with cached data instantly, then stays live for all users
-    _storeUnsubs[key]=S.db.doc(storePath(store)).onSnapshot(
-      snap=>{
-        if(snap.exists){
-          store.set(snap.data());
-          store.after();
-        }
-      },
-      e=>console.error(key,'listener error:',e)
+    const path=storePath(store);
+
+    // Immediate .get() — loads data right away
+    S.db.doc(path).get()
+      .then(snap=>{if(snap.exists){store.set(snap.data());store.after();}})
+      .catch(e=>{
+        console.error(key,'fetch failed:',e.code,e.message);
+        if(e.code==='permission-denied')
+          setStatus('Firestore rules error — check /shared/ path','err');
+      });
+
+    // onSnapshot — keeps data live in real-time after initial load
+    _storeUnsubs[key]=S.db.doc(path).onSnapshot(
+      snap=>{if(snap.exists){store.set(snap.data());store.after();}},
+      e=>{
+        console.error(key,'listener:',e.code,e.message);
+        if(e.code==='permission-denied')
+          setStatus('Permission denied — update Firestore rules','err');
+      }
     );
   });
 }
