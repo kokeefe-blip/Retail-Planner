@@ -1465,12 +1465,12 @@ function initFirebase(){
       if(user){
         S.userId=user.uid;
         S.fbReady=true;
+        document.getElementById('setup-overlay').classList.add('hidden');
         document.getElementById('signout-btn').style.display='';
+        setStatus(user.displayName||'Signed in','ok');
         if(!S.booted){
           S.booted=true;
-          // Switch overlay to loading state while data fetches
-          showLoadingState(user.displayName||'your planner');
-          prefetchAllData();
+          boot();
         }
       } else {
         document.getElementById('setup-overlay').classList.remove('hidden');
@@ -1486,69 +1486,6 @@ function initFirebase(){
     setSigninStatus('Connection error — check your internet and reload.');
   }
 }
-
-function showLoadingState(name){
-  // Keep overlay visible but swap to loading panel
-  document.getElementById('setup-overlay').classList.remove('hidden');
-  document.getElementById('signin-panel').style.display='none';
-  document.getElementById('loading-panel').style.display='';
-  document.getElementById('loading-msg').textContent=`Welcome${name?', '+name.split(' ')[0]:''}`;
-  document.getElementById('loading-detail').textContent='Fetching calendar data…';
-}
-
-function setLoadingDetail(msg){
-  const el=document.getElementById('loading-detail');
-  if(el)el.textContent=msg;
-}
-
-/* Prefetch ALL data stores before showing the app */
-function prefetchAllData(){
-  const today=new Date();
-  setLoadingDetail('Loading events & schedule…');
-
-  // Migrate old events path if needed, then fetch everything in parallel
-  migrateEventsIfNeeded().then(()=>{
-    const fetches=Object.entries(STORES).map(([key,store])=>{
-      return S.db.doc(storePath(store)).get()
-        .then(snap=>{
-          if(snap.exists){
-            store.set(snap.data());
-            setLoadingDetail(`Loaded ${key}…`);
-          }
-        })
-        .catch(e=>console.warn(key,'prefetch failed:',e));
-    });
-
-    // Also prefetch today's private daily data
-    const todayFetch=S.db.doc(docPath(today)).get()
-      .then(snap=>{
-        if(snap.exists)_prefetchedDayData=snap.data();
-      })
-      .catch(()=>{});
-
-    return Promise.all([...fetches, todayFetch]);
-  })
-  .then(()=>{
-    setLoadingDetail('Ready!');
-    // Small pause so user sees "Ready!" then launch
-    setTimeout(()=>{
-      document.getElementById('setup-overlay').classList.add('hidden');
-      boot();
-      // Now set up real-time listeners for ongoing updates
-      loadAll();
-    }, 200);
-  })
-  .catch(e=>{
-    console.error('Prefetch failed:',e);
-    // Fall back — show app anyway
-    document.getElementById('setup-overlay').classList.add('hidden');
-    boot();
-    loadAll();
-  });
-}
-
-/* Temp store for today's prefetched data */
-let _prefetchedDayData=null;
 
 function signInWithGoogle(){
   const btn=document.getElementById('google-signin-btn');
@@ -1626,19 +1563,6 @@ function loadDate(date){
     setStatus('Synced','ok');
   }
   if(S.localMode){apply(S.localStore[fmtKey(date)]||{});return;}
-
-  // Use prefetched data for today to avoid an extra network round-trip
-  if(_prefetchedDayData&&fmtKey(date)===fmtKey(new Date())){
-    apply(_prefetchedDayData);
-    _prefetchedDayData=null; // use once then clear
-    // Still set up live listener for ongoing saves
-    S.listener=S.db.doc(docPath(date)).onSnapshot(
-      s=>apply(s.exists?s.data():{}),
-      e=>{console.error(e);setStatus('Error','err');}
-    );
-    return;
-  }
-
   S.listener=S.db.doc(docPath(date)).onSnapshot(
     s=>apply(s.exists?s.data():{}),
     e=>{console.error(e);setStatus('Error','err');}
@@ -1971,10 +1895,8 @@ function boot(){
   document.getElementById('daily-dayname').textContent=DAYS_LONG[today.getDay()].toUpperCase();
   document.getElementById('daily-monthday').textContent=MONS_LONG[today.getMonth()].toUpperCase()+' '+today.getDate();
   renderCalHeader();
-  setStatus(S.auth&&S.auth.currentUser?S.auth.currentUser.displayName||'Signed in':'Ready','ok');
-
-  // All data already prefetched — show the fully populated home calendar
-  showHome();
+  showHome();       // Show calendar immediately
+  loadAll();        // Stream data in — onSnapshot re-renders when each store arrives
 }
 
 /* ══════════════════════════════════════════
@@ -2428,23 +2350,6 @@ function save(key){
 const _storeUnsubs={};
 
 /* Migrate events from old per-user path to new shared path (one-time) */
-function migrateEventsIfNeeded(){
-  if(!S.db||!S.userId)return Promise.resolve();
-  const oldPath=`/artifacts/${APP_ID}/users/${S.userId}/events/list`;
-  const newPath=`/artifacts/${APP_ID}/shared/events/list`;
-  return S.db.doc(newPath).get().then(snap=>{
-    if(snap.exists)return; // already migrated
-    return S.db.doc(oldPath).get().then(oldSnap=>{
-      if(oldSnap.exists&&oldSnap.data().events&&oldSnap.data().events.length){
-        console.log('Migrating events from user path to shared path...');
-        return S.db.doc(newPath).set(oldSnap.data(),{merge:false})
-          .then(()=>S.db.doc(oldPath).delete())
-          .then(()=>console.log('Events migrated successfully'));
-      }
-    });
-  }).catch(e=>console.warn('Migration check failed:',e));
-}
-
 function loadAll(){
   Object.entries(STORES).forEach(([key,store])=>{
     if(_storeUnsubs[key]){_storeUnsubs[key]();delete _storeUnsubs[key];}
