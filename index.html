@@ -4,20 +4,30 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <meta name="theme-color" content="#ede9e3"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
-<meta name="apple-mobile-web-app-title" content="Daily Planner"/>
-<title>Daily Planner</title>
-<!--
-╔══════════════════════════════════════════════════════════════╗
-║          FIREBASE CONFIGURATION — REQUIRED SETUP            ║
-║  1. console.firebase.google.com → Create project            ║
-║  2. Add Web App → copy config object below                  ║
-║  3. Enable Firestore Database (test mode)                   ║
-║  4. Enable Authentication → Anonymous                       ║
-╚══════════════════════════════════════════════════════════════╝
--->
+<meta name="apple-mobile-web-app-title" content="Retail Planner"/>
+<title>Retail Planner</title>
+
+<!-- External dependencies — must load before app script -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<!-- Config — after SDKs so firebase is defined -->
 <script>
+  /* ── Tailwind config ── */
+  if(typeof tailwind!=='undefined'){
+    tailwind.config={theme:{extend:{fontFamily:{
+      sans:['Inter','system-ui','sans-serif'],
+      serif:['"Playfair Display"','Georgia','serif']
+    }}}};
+  }
+
+  /* ── Firebase config ── */
   const FIREBASE_CONFIG = {
     apiKey:            "AIzaSyALAfG3_MUZ_D2KuaEH9Lbb4DJfuh5zOQ0",
     authDomain:        "merch-ops-planner.firebaseapp.com",
@@ -29,21 +39,10 @@
   };
   const APP_ID = 'yearly-daily-planner';
 </script>
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config={theme:{extend:{fontFamily:{
-    sans:['Inter','system-ui','sans-serif'],
-    serif:['"Playfair Display"','Georgia','serif']
-  }}}}
-</script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&display=swap" rel="stylesheet"/>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box}
 body{font-family:'Inter',sans-serif;background:#ede9e3;color:#1a1814;min-height:100vh;padding-bottom:env(safe-area-inset-bottom)}
@@ -1600,7 +1599,10 @@ function showDaily(){
   document.getElementById('planning-view').style.display='none';
   document.getElementById('projects-view').style.display='none';
   document.getElementById('data-view').style.display='none';
+  renderCalHeader();
+  applyEventsToSchedule(S.current);
   applyProjectReminders(S.current);
+  updateCalDataSummary(S.current);
 }
 
 function setTab(tab){
@@ -1868,7 +1870,7 @@ function wireInputs(){
 }
 
 function boot(){
-  buildSchedule();wireInputs();loadAll();
+  buildSchedule();wireInputs();
   const today=new Date();
   S.current=today;S.calView=new Date(today.getFullYear(),today.getMonth(),1);
   syncPickers(today);
@@ -1877,7 +1879,9 @@ function boot(){
   document.getElementById('daily-dayname').textContent=DAYS_LONG[today.getDay()].toUpperCase();
   document.getElementById('daily-monthday').textContent=MONS_LONG[today.getMonth()].toUpperCase()+' '+today.getDate();
   renderCalHeader();
-  showHome();
+
+  // Migrate any old per-user events to the shared path, then load all stores
+  migrateEventsIfNeeded().then(()=>loadAll(()=>showHome()));
 }
 
 /* ══════════════════════════════════════════
@@ -2259,10 +2263,9 @@ const STORES={
     get:   ()=>({events:S.events}),
     set:   d=>{S.events=d.events||[];},
     after: ()=>{
+      // Re-render every calendar surface that shows events
       renderPlanningList();
-      if(S.view==='home')renderHomeGrid();
-      else if(S.view==='month')renderMonthGrid();
-      else if(S.view==='daily'){renderCalHeader();applyEventsToSchedule(S.current);}
+      refreshCalendarEvents();
     }
   },
   kanban:{
@@ -2331,28 +2334,64 @@ function save(key){
 /* Unsubscribe functions for live listeners — cleared on sign-out */
 const _storeUnsubs={};
 
-function loadAll(){
+/* Migrate events from old per-user path to new shared path (one-time) */
+function migrateEventsIfNeeded(){
+  if(!S.db||!S.userId)return Promise.resolve();
+  const oldPath=`/artifacts/${APP_ID}/users/${S.userId}/events/list`;
+  const newPath=`/artifacts/${APP_ID}/shared/events/list`;
+  return S.db.doc(newPath).get().then(snap=>{
+    if(snap.exists)return; // already migrated
+    return S.db.doc(oldPath).get().then(oldSnap=>{
+      if(oldSnap.exists&&oldSnap.data().events&&oldSnap.data().events.length){
+        console.log('Migrating events from user path to shared path...');
+        return S.db.doc(newPath).set(oldSnap.data(),{merge:false})
+          .then(()=>S.db.doc(oldPath).delete())
+          .then(()=>console.log('Events migrated successfully'));
+      }
+    });
+  }).catch(e=>console.warn('Migration check failed:',e));
+}
+
+function loadAll(onReady){
+  // Safety net: if events never arrive (no data / first visit), still show app after 1.5s
+  let readyFired=false;
+  const readyTimer=onReady?setTimeout(()=>{
+    if(!readyFired){readyFired=true;onReady();}
+  },1500):null;
+
+  function fireReady(){
+    if(!readyFired&&onReady){
+      readyFired=true;
+      clearTimeout(readyTimer);
+      onReady();
+    }
+  }
+
   Object.entries(STORES).forEach(([key,store])=>{
-    // Clear any existing listener for this store
     if(_storeUnsubs[key]){_storeUnsubs[key]();delete _storeUnsubs[key];}
 
     if(S.localMode){
       const d=S.localStore[store.local];
       if(d){store.set(d);store.after();}
+      // Events store drives the onReady signal
+      if(key==='events')fireReady();
       return;
     }
     if(!S.db||!S.userId)return;
 
-    // onSnapshot fires immediately with cached data, then again on network updates
-    // This eliminates the "pop-in" delay and keeps all users in sync in real-time
     _storeUnsubs[key]=S.db.doc(storePath(store)).onSnapshot(
       snap=>{
         if(snap.exists){
           store.set(snap.data());
           store.after();
         }
+        // Fire onReady after events snapshot (with or without data)
+        if(key==='events')fireReady();
       },
-      e=>console.error(key,'listener error:',e)
+      e=>{
+        console.error(key,'listener error:',e);
+        if(key==='events')fireReady();
+      }
     );
   });
 }
@@ -2729,6 +2768,28 @@ function getProjectNotifications(){
 
 function allDisplayEvents(){
   return [...S.events,...getProjectNotifications()];
+}
+
+/* Refresh all calendar surfaces that display events.
+   Called whenever S.events changes (upload, edit, delete, Firebase sync). */
+function refreshCalendarEvents(){
+  switch(S.view){
+    case 'home':
+      renderHomeGrid();
+      break;
+    case 'month':
+      renderMonthGrid();
+      break;
+    case 'daily':
+      renderCalHeader();                        // mini-cal rings
+      applyEventsToSchedule(S.current);         // schedule tags + matchup
+      applyProjectReminders(S.current);         // notes strip reminders
+      updateCalDataSummary(S.current);          // sales summary
+      break;
+    case 'planning':
+      // Events page — renderPlanningList already called in after()
+      break;
+  }
 }
 
 /* ══ BOARD HOME ══ */
