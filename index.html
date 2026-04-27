@@ -2384,11 +2384,16 @@ function handleCSVDrop(e){
 ══════════════════════════════════════════════════════════════ */
 const STORES={
   events:{
-    shared: true,
+    shared: false,
     path:  'events/list',
     local: '__events__',
     get:   ()=>({events:S.events}),
-    set:   d=>{S.events=d.events||[];},
+    set:   d=>{
+      // Only update from remote if we don't already have more events locally
+      // This prevents the onSnapshot echo from clearing a just-uploaded CSV
+      const incoming=d.events||[];
+      if(incoming.length>=S.events.length)S.events=incoming;
+    },
     after: ()=>{
       // Re-render every calendar surface that shows events
       renderPlanningList();
@@ -2396,7 +2401,7 @@ const STORES={
     }
   },
   kanban:{
-    shared: true,
+    shared: false,
     path:  'kanban/board',
     local: '__kanban__',
     get:   ()=>({
@@ -2413,7 +2418,7 @@ const STORES={
     after: ()=>{if(S.view==='projects')renderProjectsView();}
   },
   dataEntries:{
-    shared: true,
+    shared: false,
     path:  'data/entries',
     local: '__dataEntries__',
     get:   ()=>({entries:DR.entries}),
@@ -2426,7 +2431,7 @@ const STORES={
     }
   },
   dataProducts:{
-    shared: true,
+    shared: false,
     path:  'data/products',
     local: '__ptRows__',
     get:   ()=>({rows:PT.rows}),
@@ -2434,7 +2439,7 @@ const STORES={
     after: ()=>{if(S.view==='data'&&DR.activeTab==='products')renderProductPage();}
   },
   icalFeeds:{
-    shared: true,
+    shared: false,
     path:  'ical/feeds',
     local: '__icalFeeds__',
     get:   ()=>({feeds:IC.feeds}),
@@ -2556,9 +2561,8 @@ function ingestCSV(text){
 
   saveEvents();
   renderPlanningList();
-  if(S.view==='home')renderHomeGrid();
-  else if(S.view==='month')renderMonthGrid();
-  else if(S.view==='daily'){renderCalHeader();applyEventsToSchedule(S.current);}
+  refreshCalendarEvents();
+  setStatus(`${S.events.length} events loaded`,'ok');
 }
 
 function clearEvents(){
