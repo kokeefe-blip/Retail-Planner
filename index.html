@@ -152,6 +152,19 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
   -webkit-print-color-adjust:exact;
   print-color-adjust:exact;
 }
+/* Project due date — gray filled square, rounded corners */
+.hcal-proj{
+  background:#d4d0c8;
+  border-radius:3px!important;
+  color:#1a1814;
+  -webkit-print-color-adjust:exact;
+  print-color-adjust:exact;
+}
+/* Event ring knocks out the square shape — keeps circle + color border */
+.hcal-proj.hcal-evt{
+  border-radius:50%!important;
+  background:transparent;
+}
 .mc-evts{display:flex;flex-direction:column;gap:0;padding:0 .3rem .15rem;flex-shrink:0;overflow:hidden}
 .mc-evt-time{font-size:.52rem;font-weight:700;letter-spacing:.04em;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mc-evt-vs{font-size:.52rem;font-weight:500;line-height:1.3;white-space:normal;word-break:break-word;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
@@ -482,6 +495,11 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
   }
   body[data-view="daily"] .hcol-cal{border-bottom:none!important;padding:1rem 1.5rem!important;}
   body[data-view="daily"] #daily-year{font-size:2rem!important;}
+  body[data-view="planning"] #evt-tab-import,
+  body[data-view="planning"] .no-print,
+  body[data-view="planning"] #evt-empty-state{display:none!important;}
+  body[data-view="planning"] .evt-group-section{break-inside:avoid;margin-bottom:1rem;}
+  body[data-view="planning"] #planning-view{display:block!important;}
   body[data-view="daily"] .daily-body{
     display:grid!important;
     grid-template-columns:20% 1fr 20%!important;
@@ -802,106 +820,163 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
 
   <!-- PLANNING VIEW -->
   <section id="planning-view" class="max-w-[1100px] mx-auto px-3 md:px-4 py-5 md:py-8" style="display:none">
-    <div class="paper rounded-xl md:rounded-2xl overflow-hidden">
 
-      <!-- Header -->
-      <div class="px-6 md:px-8 py-5 row-div flex items-center justify-between">
-        <div>
-          <div class="section-label mb-1">Import Events</div>
-          <h2 class="font-serif font-bold text-xl text-stone-800">Events</h2>
-        </div>
-        <div class="flex items-center gap-3 no-print">
-          <button onclick="downloadCSVTemplate()" class="text-xs text-stone-400 hover:text-stone-700 transition font-medium flex items-center gap-1">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Template
-          </button>
-          <button onclick="clearEvents()" class="text-xs text-stone-400 hover:text-red-500 transition font-medium" id="clear-events-btn" style="display:none">Clear All</button>
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-4 flex-wrap">
+      <div>
+        <p class="section-label mb-0.5">Schedule Management</p>
+        <h2 class="font-serif font-bold text-xl text-stone-800">Events</h2>
+      </div>
+      <div class="flex-1"></div>
+      <!-- Sub-tabs -->
+      <div class="flex rounded-lg border border-stone-200 overflow-hidden no-print" style="height:2rem">
+        <button id="etab-events" onclick="setEvtTab('events')" class="px-3 text-xs font-semibold bg-stone-100 text-stone-700 transition">By Group</button>
+        <button id="etab-chrono" onclick="setEvtTab('chrono')" class="px-3 text-xs font-semibold text-stone-400 border-l border-stone-200 hover:bg-stone-50 transition">Chronological</button>
+        <button id="etab-import" onclick="setEvtTab('import')" class="px-3 text-xs font-semibold text-stone-400 border-l border-stone-200 hover:bg-stone-50 transition">Import</button>
+      </div>
+      <!-- Print button (events tab only) -->
+      <button id="evt-print-btn" onclick="window.print()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-400 text-xs font-semibold hover:bg-stone-50 transition no-print">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print
+      </button>
+      <button onclick="clearEvents()" class="text-xs text-stone-400 hover:text-red-500 transition font-medium no-print" id="clear-events-btn" style="display:none">Clear All</button>
+    </div>
+
+    <!-- EVENTS TAB -->
+    <div id="evt-tab-events">
+
+      <!-- Filter bar -->
+      <div class="flex items-center gap-2 mb-4 flex-wrap no-print">
+        <span class="section-label">Filter:</span>
+        <div class="flex gap-1.5 flex-wrap" id="team-filters"></div>
+        <span class="section-label ml-2" id="event-count-label"></span>
+      </div>
+
+      <!-- Grouped event sections — one per team/source -->
+      <div id="event-groups-wrap">
+        <!-- Rendered by renderPlanningList() -->
+        <div id="event-list-wrap" style="display:none">
+          <!-- Legacy fallback table — kept for print -->
+          <div class="paper rounded-xl overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full" id="event-table">
+                <thead>
+                  <tr class="row-div">
+                    <th class="text-left px-4 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92;width:.5rem"></th>
+                    <th class="text-left px-3 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Date</th>
+                    <th class="text-left px-3 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Day</th>
+                    <th class="text-left px-3 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Team</th>
+                    <th class="text-left px-3 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Opponent</th>
+                    <th class="text-left px-3 py-2.5 hidden md:table-cell" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Promotion</th>
+                    <th class="text-left px-3 py-2.5 hidden lg:table-cell" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Initiative</th>
+                    <th class="text-left px-3 py-2.5 hidden lg:table-cell" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Call Time</th>
+                    <th class="text-left px-3 py-2.5 hidden lg:table-cell" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Gates</th>
+                    <th class="text-left px-3 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Kickoff</th>
+                    <th class="px-3 py-2.5 no-print"></th>
+                  </tr>
+                </thead>
+                <tbody id="event-tbody"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Upload zone -->
-      <div class="px-6 md:px-8 py-6 row-div">
-        <label id="drop-zone" for="csv-file-input"
-          class="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-stone-200 rounded-xl py-10 px-6 cursor-pointer transition hover:border-stone-400 hover:bg-stone-50"
-          ondragover="event.preventDefault();this.classList.add('border-stone-400','bg-stone-50')"
-          ondragleave="this.classList.remove('border-stone-400','bg-stone-50')"
-          ondrop="event.preventDefault();this.classList.remove('border-stone-400','bg-stone-50');handleCSVDrop(event)">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a09a92" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <div class="text-center">
-            <p class="text-sm font-medium text-stone-600">Drop a CSV file here or <span class="text-stone-900 underline underline-offset-2">browse</span></p>
-            <p class="text-xs text-stone-400 mt-1">Columns: Date · Day · Color · Team · Opponent · Promotion · Initiative · Call Time · Gates · Kickoff</p>
-          </div>
-          <input type="file" id="csv-file-input" accept=".csv,.txt" class="hidden" onchange="handleCSVFile(event)"/>
-        </label>
-
-        <!-- Format hint -->
-        <div class="mt-4 bg-stone-50 rounded-lg p-4 border border-stone-100">
-          <p class="section-label mb-2">CSV Format</p>
-          <code class="text-xs text-stone-500 leading-relaxed block font-mono">
-            Date, Day, Color, Team, Opponent, Promotion, Initiative, Call Time, Gates, Kickoff<br>
-            2026-04-18, Saturday, coral, Portland, Seattle, Poster Night, Spring Campaign, 5:00 PM, 6:00 PM, 7:30 PM<br>
-            2026-05-02, Saturday, blue, Portland, Vancouver, Jersey Giveaway, Youth Night, 4:30 PM, 5:30 PM, 7:00 PM
-          </code>
-          <p class="text-xs text-stone-400 mt-2">Colors: coral · blue · sage · amber · mauve · rose · teal — or leave blank for auto-assign by team</p>
-        </div>
+      <!-- Empty state -->
+      <div id="evt-empty-state" style="display:none" class="paper rounded-xl p-12 text-center">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#c4bfb7" stroke-width="1.5" class="mx-auto mb-3"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <p class="text-sm font-medium text-stone-400 mb-1">No events loaded</p>
+        <p class="text-xs text-stone-300">Go to the Import tab to upload a CSV or add a calendar feed</p>
+        <button onclick="setEvtTab('import')" class="mt-4 px-4 py-2 rounded-lg border border-stone-200 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition no-print">Go to Import →</button>
       </div>
 
-      <!-- iCal Feed section -->
-      <div class="px-6 md:px-8 py-5 row-div" style="border-top:1px solid #e0ddd6">
-        <div class="w-full">
-          <div class="flex items-center gap-2 mb-3">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a09a92" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            <span class="section-label">Calendar Feed (iCal)</span>
-            <span id="ical-status-badge" style="display:none;font-size:.55rem;font-weight:600;padding:.1rem .4rem;border-radius:999px;background:#dcfce7;color:#166534;letter-spacing:.05em">LIVE</span>
-          </div>
-          <p class="text-xs text-stone-400 mb-3">Paste an iCal feed URL (.ics) — syncs automatically every hour and merges with your existing events.</p>
-          <div class="flex gap-2">
-            <input id="ical-url-input" type="url" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
-              class="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-xs text-stone-800 outline-none focus:border-stone-400 transition"
-              style="font-family:inherit"/>
-            <button onclick="saveIcalFeed()" class="px-4 py-2 rounded-lg bg-stone-900 text-white text-xs font-semibold hover:bg-stone-700 transition flex-shrink-0">
-              Add Feed
-            </button>
-            <button id="ical-sync-btn" onclick="syncIcalFeed(true)" style="display:none" class="px-3 py-2 rounded-lg border border-stone-200 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition flex-shrink-0">
-              ↻ Sync Now
-            </button>
-          </div>
-          <div id="ical-feed-status" style="margin-top:.5rem;font-size:.68rem;color:#a09a92;min-height:1.1rem"></div>
+    </div><!-- /evt-tab-events -->
 
-          <!-- Active feeds list -->
-          <div id="ical-feeds-list" style="margin-top:.75rem"></div>
-        </div>
+    <!-- CHRONOLOGICAL TAB -->
+    <div id="evt-tab-chrono" style="display:none">
+
+      <!-- Filter bar -->
+      <div class="flex items-center gap-2 mb-4 flex-wrap no-print">
+        <span class="section-label">Filter:</span>
+        <div class="flex gap-1.5 flex-wrap" id="team-filters-chrono"></div>
+        <span class="section-label ml-2" id="event-count-chrono"></span>
       </div>
 
-      <!-- Event list -->
-      <div id="event-list-wrap" style="display:none">
-        <div class="px-6 md:px-8 py-3 row-div flex items-center justify-between">
-          <span class="section-label" id="event-count-label">0 events</span>
-          <div class="flex gap-2" id="team-filters"></div>
-        </div>
+      <!-- Single chronological table -->
+      <div class="paper rounded-xl overflow-hidden">
         <div class="overflow-x-auto">
-          <table class="w-full" id="event-table">
+          <table class="w-full">
             <thead>
               <tr class="row-div">
-                <th class="text-left px-5 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92;width:.5rem"></th>
-                <th class="text-left px-3 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Date</th>
-                <th class="text-left px-3 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Day</th>
-                <th class="text-left px-3 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Team</th>
-                <th class="text-left px-3 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Opponent</th>
-                <th class="text-left px-3 py-2.5 hidden md:table-cell" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Promotion</th>
-                <th class="text-left px-3 py-2.5 hidden lg:table-cell" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Initiative</th>
-                <th class="text-left px-3 py-2.5 hidden lg:table-cell" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Call Time</th>
-                <th class="text-left px-3 py-2.5 hidden lg:table-cell" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Gates</th>
-                <th class="text-left px-3 py-2.5" style="font-size:.55rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a09a92">Kickoff</th>
+                <th class="text-left px-4 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92;width:1rem"></th>
+                <th class="text-left px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Date</th>
+                <th class="text-left px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Day</th>
+                <th class="text-left px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Team</th>
+                <th class="text-left px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Opponent</th>
+                <th class="text-left px-3 py-2.5 hidden md:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Promotion</th>
+                <th class="text-left px-3 py-2.5 hidden lg:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Call Time</th>
+                <th class="text-left px-3 py-2.5 hidden lg:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Gates</th>
+                <th class="text-left px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Kickoff</th>
                 <th class="px-3 py-2.5 no-print"></th>
               </tr>
             </thead>
-            <tbody id="event-tbody"></tbody>
+            <tbody id="event-tbody-chrono"></tbody>
           </table>
         </div>
       </div>
 
-    </div>
+    </div><!-- /evt-tab-chrono -->
+
+    <!-- IMPORT TAB -->
+    <div id="evt-tab-import" style="display:none">
+
+      <div class="paper rounded-xl md:rounded-2xl overflow-hidden">
+
+        <!-- CSV Upload -->
+        <div class="px-6 md:px-8 py-6">
+          <div class="section-label mb-3">Upload CSV</div>
+          <label id="drop-zone" for="csv-file-input"
+            class="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-stone-200 rounded-xl py-10 px-6 cursor-pointer transition hover:border-stone-400 hover:bg-stone-50"
+            ondragover="event.preventDefault();this.classList.add('border-stone-400','bg-stone-50')"
+            ondragleave="this.classList.remove('border-stone-400','bg-stone-50')"
+            ondrop="event.preventDefault();this.classList.remove('border-stone-400','bg-stone-50');handleCSVDrop(event)">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a09a92" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <div class="text-center">
+              <p class="text-sm font-medium text-stone-600">Drop a CSV here or <span class="text-stone-900 underline underline-offset-2">browse</span></p>
+              <p class="text-xs text-stone-400 mt-1">Date · Day · Color · Team · Opponent · Promotion · Initiative · Call Time · Gates · Kickoff</p>
+            </div>
+            <input type="file" id="csv-file-input" accept=".csv,.txt" class="hidden" onchange="handleCSVFile(event)"/>
+          </label>
+          <div class="mt-3 flex gap-2">
+            <button onclick="downloadCSVTemplate()" class="text-xs text-stone-400 hover:text-stone-700 transition font-medium flex items-center gap-1">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download template
+            </button>
+          </div>
+        </div>
+
+        <!-- iCal Feed -->
+        <div class="px-6 md:px-8 py-5" style="border-top:1px solid #e0ddd6">
+          <div class="flex items-center gap-2 mb-2">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a09a92" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span class="section-label">Calendar Feed (iCal)</span>
+            <span id="ical-status-badge" style="display:none;font-size:.55rem;font-weight:600;padding:.1rem .4rem;border-radius:999px;background:#dcfce7;color:#166534">LIVE</span>
+          </div>
+          <p class="text-xs text-stone-400 mb-3">Paste an .ics URL — auto-syncs every hour and merges with existing events.</p>
+          <div class="flex gap-2">
+            <input id="ical-url-input" type="url" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+              class="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-xs text-stone-800 outline-none focus:border-stone-400"
+              style="font-family:inherit"/>
+            <button onclick="saveIcalFeed()" class="px-4 py-2 rounded-lg bg-stone-900 text-white text-xs font-semibold hover:bg-stone-700 transition flex-shrink-0">Add Feed</button>
+            <button id="ical-sync-btn" onclick="syncIcalFeed(true)" style="display:none" class="px-3 py-2 rounded-lg border border-stone-200 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition flex-shrink-0">↻ Sync</button>
+          </div>
+          <div id="ical-feed-status" style="margin-top:.4rem;font-size:.65rem;color:#a09a92;min-height:1rem"></div>
+          <div id="ical-feeds-list" style="margin-top:.5rem"></div>
+        </div>
+
+      </div>
+    </div><!-- /evt-tab-import -->
+
   </section>
 
   <!-- PROJECTS VIEW -->
@@ -997,9 +1072,10 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
       <div class="flex-1"></div>
       <!-- Sub-nav tabs -->
       <div class="flex rounded-lg border border-stone-200 overflow-hidden no-print" style="height:2rem">
-        <button id="dtab-overview" onclick="setDataTab('overview')" class="px-3 text-xs font-semibold bg-stone-100 text-stone-700 transition">Overview</button>
-        <button id="dtab-products" onclick="setDataTab('products')" class="px-3 text-xs font-semibold text-stone-400 border-l border-stone-200 hover:bg-stone-50 transition">Product Types</button>
-        <button id="dtab-events"   onclick="setDataTab('events')"   class="px-3 text-xs font-semibold text-stone-400 border-l border-stone-200 hover:bg-stone-50 transition">Event Data</button>
+        <button id="dtab-overview"    onclick="setDataTab('overview')"    class="px-3 text-xs font-semibold bg-stone-100 text-stone-700 transition">Overview</button>
+        <button id="dtab-products"    onclick="setDataTab('products')"    class="px-3 text-xs font-semibold text-stone-400 border-l border-stone-200 hover:bg-stone-50 transition">Product Types</button>
+        <button id="dtab-events"      onclick="setDataTab('events')"      class="px-3 text-xs font-semibold text-stone-400 border-l border-stone-200 hover:bg-stone-50 transition">Event Data</button>
+        <button id="dtab-historicals" onclick="setDataTab('historicals')" class="px-3 text-xs font-semibold text-stone-400 border-l border-stone-200 hover:bg-stone-50 transition">Historicals</button>
       </div>
     </div>
 
@@ -1253,6 +1329,65 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
       </div>
 
     </div><!-- /data-tab-events -->
+
+    <!-- HISTORICALS TAB -->
+    <div id="data-tab-historicals" style="display:none">
+
+      <!-- Actions bar -->
+      <div class="flex items-center gap-2 mb-5 flex-wrap">
+        <div class="flex-1"></div>
+        <label class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-semibold cursor-pointer hover:bg-stone-50 transition no-print">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Import Historicals CSV
+          <input type="file" accept=".csv" class="hidden" onchange="importHistoricalsCSV(event)" multiple/>
+        </label>
+        <button onclick="downloadHistoricalsTemplate()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-400 text-xs font-semibold hover:bg-stone-50 transition no-print">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Template
+        </button>
+        <button onclick="clearHistoricals()" class="text-xs text-stone-400 hover:text-red-500 font-medium transition no-print" id="hist-clear-btn" style="display:none">Clear All</button>
+      </div>
+
+      <!-- Year tabs + team filter -->
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div class="flex gap-1.5 flex-wrap" id="hist-year-tabs"></div>
+        <div class="flex rounded-lg border border-stone-200 overflow-hidden no-print" style="height:1.75rem">
+          <button id="histf-all"     onclick="setHistFilter('all','team')"     class="px-3 text-xs font-semibold transition dt-active">All</button>
+          <button id="histf-Timbers" onclick="setHistFilter('Timbers','team')" class="px-3 text-xs font-semibold transition dt-inactive border-l border-stone-200">Timbers</button>
+          <button id="histf-Thorns"  onclick="setHistFilter('Thorns','team')"  class="px-3 text-xs font-semibold transition dt-inactive border-l border-stone-200">Thorns</button>
+        </div>
+      </div>
+
+      <!-- Summary cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5" id="hist-summary"></div>
+
+      <!-- Data table -->
+      <div class="paper rounded-xl overflow-hidden">
+        <div class="px-5 py-3 row-div flex items-center justify-between">
+          <span class="section-label" id="hist-count">No historical data — import a CSV to get started</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="row-div">
+                <th class="text-left px-4 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Year</th>
+                <th class="text-left px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Date</th>
+                <th class="text-left px-3 py-2.5 hidden sm:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Day</th>
+                <th class="text-left px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Event Tag</th>
+                <th class="text-right px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Orders</th>
+                <th class="text-right px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Net Sales</th>
+                <th class="text-right px-3 py-2.5 hidden md:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Units</th>
+                <th class="text-right px-3 py-2.5 hidden md:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">AOV</th>
+                <th class="text-right px-3 py-2.5 hidden lg:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Avg Basket</th>
+                <th class="px-3 py-2.5 no-print"></th>
+              </tr>
+            </thead>
+            <tbody id="hist-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /data-tab-historicals -->
 
   </section>
 
@@ -1966,9 +2101,11 @@ function renderHomeGrid(){
     for(let n=1;n<=d;n++){
       const cls=isToday(new Date(y,m,n))?'hcal-today':'';
       const dk=`${y}-${String(m+1).padStart(2,'0')}-${String(n).padStart(2,'0')}`;
-      const evts=S.events.filter(e=>e.date===dk); // game events only, not project notifs
+      const evts=S.events.filter(e=>e.date===dk); // game events only
+      const isDue=KS.cards.some(c=>c.date===dk);   // project due date
       const ring=evts.length?` hcal-evt" style="border:1.5px solid ${evts[0].colorHex}`:``;
-      html+=`<div class="hcal-cell ${cls}${ring}" onclick="navigateTo(new Date(${y},${m},${n}))">${n}</div>`;
+      const projCls=isDue&&!cls?' hcal-proj':'';
+      html+=`<div class="hcal-cell ${cls}${projCls}${ring}" onclick="navigateTo(new Date(${y},${m},${n}))">${n}</div>`;
     }
     for(let i=1;i<=trail;i++) html+=`<div class="hcal-cell hcal-other">${i}</div>`;
     html+=`</div>`;
@@ -2346,7 +2483,7 @@ function rowsToEvents(rows){
     const callTime  = n.calltime||n['call time']||'';
     const gates     = n.gates||'';
     const kickoff   = n.kickoff||'';
-    const day       = n.day||'';
+    const day       = (()=>{try{return DAYS_LONG[parseKey(date).getDay()];}catch{return n.day||'';}})();
     const color     = resolveColor(n.color||n.colour||'',team);
     const callHour  = parseHour(callTime);
     const gatesHour = parseHour(gates);
@@ -2382,6 +2519,12 @@ function handleCSVDrop(e){
    2. Call save('key') whenever data changes
    3. loadAll() in boot() picks it up automatically
 ══════════════════════════════════════════════════════════════ */
+const HIST={
+  rows:[],      // {year,day,date,eventTag,team,opponent,orders,netSales,units,aov,avgBasket}
+  filterYear:'all',
+  filterTeam:'all',
+};
+
 const STORES={
   events:{
     shared: false,
@@ -2389,14 +2532,21 @@ const STORES={
     local: '__events__',
     get:   ()=>({events:S.events}),
     set:   d=>{
-      // Only update from remote if we don't already have more events locally
-      // This prevents the onSnapshot echo from clearing a just-uploaded CSV
       const incoming=d.events||[];
-      if(incoming.length>=S.events.length)S.events=incoming;
+      if(incoming.length>=S.events.length){
+        // Auto-fill missing day names from date
+        incoming.forEach(e=>{
+          if(!e.day&&e.date){
+            try{e.day=DAYS_LONG[parseKey(e.date).getDay()];}catch{}
+          }
+        });
+        S.events=incoming;
+      }
     },
     after: ()=>{
       // Re-render every calendar surface that shows events
       renderPlanningList();
+      if(_evtActiveTab==='chrono')renderChronoList();
       refreshCalendarEvents();
     }
   },
@@ -2451,6 +2601,14 @@ const STORES={
         syncAllFeeds().catch(console.warn);
       }
     }
+  },
+  historicals:{
+    shared: false,
+    path:  'data/historicals',
+    local: '__historicals__',
+    get:   ()=>({rows:HIST.rows}),
+    set:   d=>{HIST.rows=d.rows||[];},
+    after: ()=>{if(S.view==='data'&&DR.activeTab==='historicals')renderHistoricalsPage();}
   },
 };
 
@@ -2563,6 +2721,8 @@ function ingestCSV(text){
   renderPlanningList();
   refreshCalendarEvents();
   setStatus(`${S.events.length} events loaded`,'ok');
+  // Switch to the By Group tab so results are immediately visible
+  setEvtTab('events');
 }
 
 function clearEvents(){
@@ -2575,76 +2735,173 @@ function clearEvents(){
   else if(S.view==='daily'){renderCalHeader();applyEventsToSchedule(S.current);}
 }
 
-function renderPlanningList(){
-  const wrap=document.getElementById('event-list-wrap');
-  const tbody=document.getElementById('event-tbody');
-  const clearBtn=document.getElementById('clear-events-btn');
-  const countLbl=document.getElementById('event-count-label');
-
-  if(!S.events.length){wrap.style.display='none';clearBtn.style.display='none';S.evtFilter=null;return;}
-
-  wrap.style.display='';clearBtn.style.display='';
-
-  // Team filter badges — All + one per team
-  const teams=[...new Set(S.events.map(e=>e.team).filter(Boolean))];
-  const allActive=!S.evtFilter;
-  document.getElementById('team-filters').innerHTML=
-    `<span onclick="toggleEvtFilter(null)" class="team-badge"
-      style="background:${allActive?'#1a181440':'#1a181410'};color:#1a1814;border:1.5px solid ${allActive?'#1a181480':'#1a181430'};${allActive?'font-weight:700':''}">All</span>`+
-    teams.map(t=>{
-      const c=resolveColor('',t);
-      const active=S.evtFilter===t;
-      return `<span onclick="toggleEvtFilter('${t}')" class="team-badge"
-        style="background:${c}${active?'40':'18'};color:${c};border:1.5px solid ${c}${active?'':'40'};${active?'font-weight:700':''}">${t}</span>`;
-    }).join('');
-
-  // Filter + sort
-  let displayed=S.evtFilter?S.events.filter(e=>e.team===S.evtFilter):S.events;
-  displayed=[...displayed].sort((a,b)=>a.date.localeCompare(b.date));
-
-  countLbl.textContent=(S.evtFilter?`${S.evtFilter} · `:'')+displayed.length+' event'+(displayed.length!==1?'s':'');
-
-  tbody.innerHTML=displayed.map((e,i)=>{
-    const d=parseKey(e.date);
-    const dateStr=MONS_SHORT[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
-    // find real index in S.events for editing
-    const realIdx=S.events.indexOf(e);
-    return `<tr class="evt-row" data-idx="${realIdx}" style="cursor:pointer;transition:background .1s">
-      <td>
-        <span onclick="event.stopPropagation();toggleEvtFilter('${e.team||''}')"
-          style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${e.colorHex};cursor:pointer;transition:transform .12s;vertical-align:middle"
-          title="Filter: ${e.team||'unknown'}"
-          onmouseover="this.style.transform='scale(1.35)'" onmouseout="this.style.transform='scale(1)'">
-        </span>
-      </td>
-      <td style="white-space:nowrap">${dateStr}</td>
-      <td style="color:#a09a92">${e.day||'—'}</td>
-      <td style="font-weight:600">${e.team||'—'}</td>
-      <td style="font-weight:500">${e.opponent||'—'}</td>
-      <td class="hidden md:table-cell" style="color:#6a6460">${e.promotion||'—'}</td>
-      <td class="hidden lg:table-cell" style="color:#6a6460">${e.initiative||'—'}</td>
-      <td class="hidden lg:table-cell" style="color:#a09a92;white-space:nowrap">${e.callTime||'—'}</td>
-      <td class="hidden lg:table-cell" style="color:#a09a92;white-space:nowrap">${e.gates||'—'}</td>
-      <td style="font-weight:500;white-space:nowrap">${e.kickoff||'—'}</td>
-      <td class="no-print">
-        <button onclick="event.stopPropagation();removeEvent(${realIdx})"
-          style="font-size:.65rem;color:#a09a92;background:none;border:none;cursor:pointer;padding:.1rem .3rem"
-          onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a09a92'">✕</button>
-      </td>
-    </tr>`;
-  }).join('');
-
-  // Wire row click → edit modal
-  tbody.querySelectorAll('.evt-row').forEach(row=>{
-    row.addEventListener('mouseover',()=>row.style.background='#f5f2ed');
-    row.addEventListener('mouseout',()=>row.style.background='');
-    row.addEventListener('click',()=>openEvtModal(parseInt(row.dataset.idx)));
+/* ── Events page tab switcher ── */
+let _evtActiveTab='events';
+function setEvtTab(tab){
+  _evtActiveTab=tab;
+  document.getElementById('evt-tab-events').style.display=tab==='events'?'':'none';
+  document.getElementById('evt-tab-chrono').style.display=tab==='chrono'?'':'none';
+  document.getElementById('evt-tab-import').style.display=tab==='import'?'':'none';
+  document.getElementById('evt-print-btn').style.display=(tab==='events'||tab==='chrono')?'':'none';
+  ['events','chrono','import'].forEach(t=>{
+    const el=document.getElementById('etab-'+t);
+    if(!el)return;
+    el.className='px-3 text-xs font-semibold transition'+(t!=='events'?' border-l border-stone-200':'')+(t===tab?' bg-stone-100 text-stone-700':' text-stone-400 hover:bg-stone-50');
   });
+  if(tab==='chrono')renderChronoList();
 }
 
-function toggleEvtFilter(team){
-  S.evtFilter=S.evtFilter===team?null:team;
-  renderPlanningList();
+function renderPlanningList(){
+  const countLbl=document.getElementById('event-count-label');
+  const clearBtn=document.getElementById('clear-events-btn');
+  const emptyState=document.getElementById('evt-empty-state');
+  const groupsWrap=document.getElementById('event-groups-wrap');
+  const legacyWrap=document.getElementById('event-list-wrap');
+  const tbody=document.getElementById('event-tbody');
+
+  if(!S.events.length){
+    if(clearBtn)clearBtn.style.display='none';
+    if(emptyState)emptyState.style.display='';
+    if(groupsWrap)groupsWrap.style.display='none';
+    if(countLbl)countLbl.textContent='';
+    S.evtFilter=null;
+    return;
+  }
+
+  if(clearBtn)clearBtn.style.display='';
+  if(emptyState)emptyState.style.display='none';
+  if(groupsWrap)groupsWrap.style.display='';
+
+  // Build team filter badges
+  const allTeams=[...new Set(S.events.map(e=>e.team).filter(Boolean))].sort();
+  const allActive=!S.evtFilter;
+  const tfEl=document.getElementById('team-filters');
+  if(tfEl){
+    tfEl.innerHTML=
+      `<span onclick="toggleEvtFilter(null)" class="team-badge"
+        style="background:${allActive?'#1a181440':'#1a181410'};color:#1a1814;border:1.5px solid ${allActive?'#1a181480':'#1a181430'};${allActive?'font-weight:700':''}">All</span>`+
+      allTeams.map(t=>{
+        const c=resolveColor('',t);
+        const active=S.evtFilter===t;
+        return `<span onclick="toggleEvtFilter('${t}')" class="team-badge"
+          style="background:${c}${active?'40':'18'};color:${c};border:1.5px solid ${c}${active?'':'40'};${active?'font-weight:700':''}">${t}</span>`;
+      }).join('');
+  }
+
+  // Filter events
+  let filtered=S.evtFilter?S.events.filter(e=>e.team===S.evtFilter):S.events;
+  filtered=[...filtered].sort((a,b)=>a.date.localeCompare(b.date));
+  if(countLbl)countLbl.textContent=(S.evtFilter?`${S.evtFilter} · `:'')+filtered.length+' event'+(filtered.length!==1?'s':'');
+
+  // Group by team / source
+  const groups={};
+  filtered.forEach(e=>{
+    const src=e._fromIcal?(e.team||'Calendar Feed'):(e.team||'Unknown');
+    if(!groups[src])groups[src]=[];
+    groups[src].push(e);
+  });
+
+  // Render grouped tables — hide the legacy wrap, render into groupsWrap directly
+  if(legacyWrap)legacyWrap.style.display='none';
+
+  // Clear old group tables (keep legacyWrap)
+  const oldGroups=groupsWrap.querySelectorAll('.evt-group-section');
+  oldGroups.forEach(el=>el.remove());
+
+  const groupKeys=Object.keys(groups).sort();
+  groupKeys.forEach(groupName=>{
+    const evts=groups[groupName];
+    const tc=resolveColor('',groupName);
+    const section=document.createElement('div');
+    section.className='evt-group-section paper rounded-xl overflow-hidden mb-4';
+
+    // Group header
+    section.innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem 1rem;border-bottom:2px solid ${tc}20;background:${tc}08">
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <div style="width:8px;height:8px;border-radius:50%;background:${tc};flex-shrink:0"></div>
+          <span style="font-size:.62rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:${tc}">${esc(groupName)}</span>
+          <span style="font-size:.6rem;color:#a09a92;font-weight:500">${evts.length} event${evts.length!==1?'s':''}</span>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="row-div">
+              <th class="text-left px-4 py-2" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92;width:1rem"></th>
+              <th class="text-left px-3 py-2" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Date</th>
+              <th class="text-left px-3 py-2" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Day</th>
+              <th class="text-left px-3 py-2" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Opponent</th>
+              <th class="text-left px-3 py-2 hidden md:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Promotion</th>
+              <th class="text-left px-3 py-2 hidden lg:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Call Time</th>
+              <th class="text-left px-3 py-2 hidden lg:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Gates</th>
+              <th class="text-left px-3 py-2" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Kickoff</th>
+              <th class="px-3 py-2 no-print"></th>
+            </tr>
+          </thead>
+          <tbody class="evt-group-tbody"></tbody>
+        </table>
+      </div>`;
+
+    const groupTbody=section.querySelector('.evt-group-tbody');
+    evts.forEach((e,i)=>{
+      const realIdx=S.events.indexOf(e);
+      let d;try{d=parseKey(e.date);}catch{return;}
+      const dateStr=MONS_SHORT[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+      const tr=document.createElement('tr');
+      tr.className='evt-row';
+      tr.dataset.idx=realIdx;
+      tr.style.cssText='cursor:pointer;transition:background .1s';
+      tr.innerHTML=`
+        <td style="padding:.4rem .75rem">
+          <span onclick="event.stopPropagation();toggleEvtFilter('${e.team||''}')"
+            style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${e.colorHex};cursor:pointer;vertical-align:middle;transition:transform .12s"
+            onmouseover="this.style.transform='scale(1.35)'" onmouseout="this.style.transform='scale(1)'">
+          </span>
+        </td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;white-space:nowrap;font-weight:500">${dateStr}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92">${e.day||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;font-weight:500">${e.opponent||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;color:#6a6460" class="hidden md:table-cell">${e.promotion||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92;white-space:nowrap" class="hidden lg:table-cell">${e.callTime||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92;white-space:nowrap" class="hidden lg:table-cell">${e.gates||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;font-weight:500;white-space:nowrap">${e.kickoff||'—'}</td>
+        <td class="no-print" style="padding:.4rem .75rem">
+          <button onclick="event.stopPropagation();removeEvent(${realIdx})"
+            style="font-size:.6rem;color:#a09a92;background:none;border:none;cursor:pointer;padding:.1rem .2rem"
+            onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a09a92'">✕</button>
+        </td>`;
+
+      tr.addEventListener('mouseover',()=>tr.style.background='#f5f2ed');
+      tr.addEventListener('mouseout',()=>tr.style.background='');
+      tr.addEventListener('click',()=>openEvtModal(parseInt(tr.dataset.idx)));
+      groupTbody.appendChild(tr);
+    });
+
+    groupsWrap.appendChild(section);
+  });
+
+  // Also populate legacy tbody for print consistency
+  if(tbody){
+    tbody.innerHTML=filtered.map((e,i)=>{
+      const realIdx=S.events.indexOf(e);
+      let d;try{d=parseKey(e.date);}catch{return '';}
+      const dateStr=MONS_SHORT[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+      return `<tr>
+        <td style="padding:.4rem .75rem"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${e.colorHex}"></span></td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;white-space:nowrap">${dateStr}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92">${e.day||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;font-weight:500">${e.team||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem">${e.opponent||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;color:#6a6460">${e.promotion||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;color:#6a6460">${e.initiative||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92">${e.callTime||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92">${e.gates||'—'}</td>
+        <td style="padding:.4rem .75rem;font-size:.72rem;font-weight:500">${e.kickoff||'—'}</td>
+        <td></td>
+      </tr>`;
+    }).join('');
+  }
 }
 
 function removeEvent(idx){
@@ -2691,7 +2948,9 @@ function saveEvtModal(){
   if(_evtEditIdx<0||_evtEditIdx>=S.events.length)return;
   const e=S.events[_evtEditIdx];
   e.date=document.getElementById('ef-date').value;
-  e.day=document.getElementById('ef-day').value;
+  // Auto-derive day from date — override manual entry
+  try{e.day=DAYS_LONG[parseKey(e.date).getDay()];}
+  catch{e.day=document.getElementById('ef-day').value;}
   e.team=document.getElementById('ef-team').value.trim();
   e.opponent=document.getElementById('ef-opponent').value.trim();
   e.promotion=document.getElementById('ef-promotion').value.trim();
@@ -2782,20 +3041,118 @@ function applyProjectReminders(date){
   const el=document.getElementById('proj-reminders');
   if(!el)return;
   const key=fmtKey(date);
+
+  // Projects due ON this exact day
+  const dueToday=KS.cards.filter(c=>c.date===key);
+
+  // 7-day and 3-day advance reminders
   const reminders=getProjectNotifications().filter(n=>n.date===key);
 
-  if(!reminders.length){el.style.display='none';return;}
+  if(!dueToday.length&&!reminders.length){el.style.display='none';return;}
 
   el.style.display='block';
-  el.innerHTML=reminders.map(r=>{
+
+  let html='';
+
+  // Due today — shown first, in the board's color
+  dueToday.forEach(card=>{
+    const board=KS.boards.find(b=>b.id===card.boardId);
+    const color=board?board.color:teamColorFor(card.team);
+    html+=`<div class="proj-reminder-item">
+      <span class="proj-reminder-bullet" style="color:${color}">■</span>
+      <span class="proj-reminder-text"><strong style="font-weight:700">${esc(card.name)}</strong></span>
+      <span class="proj-reminder-due" style="color:${color};font-weight:600">DUE TODAY</span>
+    </div>`;
+  });
+
+  // Advance reminders (7d / 3d)
+  reminders.forEach(r=>{
     const daysOut=r.subject.includes('7 days')?7:3;
     const urgColor=daysOut===3?'#d4856a':'#c9a84c';
-    return `<div class="proj-reminder-item">
+    html+=`<div class="proj-reminder-item">
       <span class="proj-reminder-bullet" style="color:${urgColor}">•</span>
       <span class="proj-reminder-text"><strong style="font-weight:600">${r.projName}</strong></span>
       <span class="proj-reminder-due" style="color:${urgColor}">due ${r.dueStr} · ${daysOut}d</span>
     </div>`;
+  });
+
+  el.innerHTML=html;
+}
+
+function renderChronoList(){
+  const tbody=document.getElementById('event-tbody-chrono');
+  const countEl=document.getElementById('event-count-chrono');
+  const tfEl=document.getElementById('team-filters-chrono');
+  if(!tbody)return;
+
+  // Team filter badges (shared filter state)
+  const allTeams=[...new Set(S.events.map(e=>e.team).filter(Boolean))].sort();
+  const allActive=!S.evtFilter;
+  if(tfEl){
+    tfEl.innerHTML=
+      `<span onclick="toggleEvtFilter(null)" class="team-badge"
+        style="background:${allActive?'#1a181440':'#1a181410'};color:#1a1814;border:1.5px solid ${allActive?'#1a181480':'#1a181430'};${allActive?'font-weight:700':''}">All</span>`+
+      allTeams.map(t=>{
+        const c=resolveColor('',t);
+        const active=S.evtFilter===t;
+        return `<span onclick="toggleEvtFilter('${t}')" class="team-badge"
+          style="background:${c}${active?'40':'18'};color:${c};border:1.5px solid ${c}${active?'':'40'};${active?'font-weight:700':''}">${t}</span>`;
+      }).join('');
+  }
+
+  // All events sorted chronologically
+  let sorted=S.evtFilter?S.events.filter(e=>e.team===S.evtFilter):[...S.events];
+  sorted=sorted.sort((a,b)=>a.date.localeCompare(b.date));
+
+  if(countEl)countEl.textContent=(S.evtFilter?`${S.evtFilter} · `:'')+sorted.length+' event'+(sorted.length!==1?'s':'');
+
+  let lastMonth='';
+  tbody.innerHTML=sorted.map(e=>{
+    const realIdx=S.events.indexOf(e);
+    let d;try{d=parseKey(e.date);}catch{return '';}
+    const dateStr=MONS_SHORT[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+    const tc=TEAM_COLORS[e.team]||resolveColor('',e.team)||'#8a8a8a';
+
+    // Month separator row
+    const monthKey=`${d.getFullYear()}-${d.getMonth()}`;
+    let sepRow='';
+    if(monthKey!==lastMonth){
+      lastMonth=monthKey;
+      const monthLabel=MONS_LONG[d.getMonth()].toUpperCase()+' '+d.getFullYear();
+      sepRow=`<tr style="background:#f5f2ed">
+        <td colspan="10" style="padding:.4rem 1rem;font-size:.55rem;font-weight:700;letter-spacing:.2em;color:#a09a92">${monthLabel}</td>
+      </tr>`;
+    }
+
+    return sepRow+`<tr style="cursor:pointer;transition:background .1s"
+      onmouseover="this.style.background='#faf9f6'" onmouseout="this.style.background=''"
+      onclick="openEvtModal(${realIdx})">
+      <td style="padding:.4rem .75rem">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${e.colorHex};vertical-align:middle"></span>
+      </td>
+      <td style="padding:.4rem .75rem;font-size:.72rem;white-space:nowrap;font-weight:500">${dateStr}</td>
+      <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92">${e.day||'—'}</td>
+      <td style="padding:.4rem .75rem;font-size:.72rem">
+        <span style="font-size:.6rem;font-weight:600;color:${tc}">${e.team||'—'}</span>
+      </td>
+      <td style="padding:.4rem .75rem;font-size:.72rem;font-weight:500">${e.opponent||'—'}</td>
+      <td style="padding:.4rem .75rem;font-size:.72rem;color:#6a6460" class="hidden md:table-cell">${e.promotion||'—'}</td>
+      <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92;white-space:nowrap" class="hidden lg:table-cell">${e.callTime||'—'}</td>
+      <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92;white-space:nowrap" class="hidden lg:table-cell">${e.gates||'—'}</td>
+      <td style="padding:.4rem .75rem;font-size:.72rem;font-weight:500;white-space:nowrap">${e.kickoff||'—'}</td>
+      <td class="no-print" style="padding:.4rem .75rem">
+        <button onclick="event.stopPropagation();removeEvent(${realIdx})"
+          style="font-size:.6rem;color:#a09a92;background:none;border:none;cursor:pointer;padding:.1rem .2rem"
+          onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a09a92'">✕</button>
+      </td>
+    </tr>`;
   }).join('');
+}
+
+function toggleEvtFilter(team){
+  S.evtFilter=team===undefined||team===null?null:(S.evtFilter===team?null:team);
+  renderPlanningList();
+  if(_evtActiveTab==='chrono')renderChronoList();
 }
 
 function showPlanning(){
@@ -2810,6 +3167,7 @@ function showPlanning(){
   document.getElementById('projects-view').style.display='none';
   document.getElementById('data-view').style.display='none';
   renderPlanningList();
+  setEvtTab(S.events.length?'events':'import');
 }
 
 function showProjects(){
@@ -3595,8 +3953,10 @@ function importProjectCSV(e){
       added++;
     });
     if(!added){alert('No valid projects found. Check your CSV.');return;}
-    kbSave();renderKanban();
+    kbSave();
     setStatus(`+${added} projects imported`,'ok');
+    // Open current board's kanban so imports are visible immediately
+    if(S.view==='projects') renderKanban();
   };
   reader.readAsText(f);
   e.target.value='';
@@ -4195,8 +4555,11 @@ function importDataCSV(e){
       added++;
     });
     if(!added){alert('No valid entries found.');return;}
-    drSave();if(S.view==='data')renderDataPage();
+    drSave();
     setStatus(`+${added} data entries`,'ok');
+    if(S.view==='data'){
+      setDataTab('overview');
+    }
   };
   reader.readAsText(f);
   e.target.value='';
@@ -4219,17 +4582,15 @@ DR.ptChartInstance=null;
 
 function setDataTab(tab){
   DR.activeTab=tab;
-  document.getElementById('data-tab-overview').style.display=tab==='overview'?'':'none';
-  document.getElementById('data-tab-products').style.display=tab==='products'?'':'none';
-  document.getElementById('data-tab-events').style.display=tab==='events'?'':'none';
-  ['overview','products','events'].forEach(t=>{
-    const el=document.getElementById('dtab-'+t);
-    if(!el)return;
-    const isFirst=t==='overview';
-    el.className='px-3 text-xs font-semibold transition'+(t===tab?' bg-stone-100 text-stone-700':' text-stone-400 hover:bg-stone-50')+(isFirst?'':' border-l border-stone-200');
+  ['overview','products','events','historicals'].forEach(t=>{
+    const panel=document.getElementById('data-tab-'+t);
+    if(panel)panel.style.display=t===tab?'':'none';
+    const btn=document.getElementById('dtab-'+t);
+    if(btn)btn.className='px-3 text-xs font-semibold transition'+(t!=='overview'?' border-l border-stone-200':'')+(t===tab?' bg-stone-100 text-stone-700':' text-stone-400 hover:bg-stone-50');
   });
   if(tab==='products')renderProductPage();
   if(tab==='events')renderEventDataPage();
+  if(tab==='historicals')renderHistoricalsPage();
 }
 
 /* ══════════════════════════════════════════
@@ -4500,7 +4861,8 @@ function parseProductCSV(text,overwrite){
 
   ptSave();
   setStatus(`${newRows.length} product rows loaded`,'ok');
-  renderProductPage();
+  if(S.view==='data') setDataTab('products');
+  else renderProductPage();
 }
 
 function clearProductData(){
@@ -4958,8 +5320,8 @@ function importEventDataCSV(e){
       }
     });
     drSave();
-    if(S.view==='data')renderEventDataPage();
     setStatus(`Event data imported`,'ok');
+    if(S.view==='data') setDataTab('events');
   };
   reader.readAsText(f);
   e.target.value='';
@@ -4970,6 +5332,228 @@ function downloadEventDataTemplate(){
   const blob=new Blob([csv],{type:'text/csv'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download='event-data-template.csv';a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ══════════════════════════════════════════
+   HISTORICALS
+   CSV columns: Year, Day, Date, Event Tag,
+   Orders, Net Sales, Units, AOV, Avg Basket
+   Event Tag format: Team:PlayingTeam-Opponent
+   e.g. Timbers:Portland-Seattle
+══════════════════════════════════════════ */
+
+function histTeamFromTag(tag){
+  if(!tag)return'';
+  const u=tag.toUpperCase();
+  if(u.startsWith('TIMBERS')||u.startsWith('PORTLAND'))return'Timbers';
+  if(u.startsWith('THORNS'))return'Thorns';
+  // Try splitting on colon
+  const parts=tag.split(':');
+  if(parts.length>1){
+    const t=parts[0].trim().toLowerCase();
+    if(t.includes('timbers'))return'Timbers';
+    if(t.includes('thorns'))return'Thorns';
+  }
+  return tag.split(':')[0].trim();
+}
+
+function setHistFilter(val,type){
+  if(type==='year')HIST.filterYear=val;
+  else HIST.filterTeam=val;
+  renderHistoricalsPage();
+}
+
+function renderHistoricalsPage(){
+  if(!HIST.rows.length){
+    const countEl=document.getElementById('hist-count');
+    if(countEl)countEl.textContent='No historical data — import a CSV to get started';
+    const clearBtn=document.getElementById('hist-clear-btn');
+    if(clearBtn)clearBtn.style.display='none';
+    document.getElementById('hist-summary').innerHTML='';
+    document.getElementById('hist-tbody').innerHTML='';
+    document.getElementById('hist-year-tabs').innerHTML='';
+    return;
+  }
+
+  const clearBtn=document.getElementById('hist-clear-btn');
+  if(clearBtn)clearBtn.style.display='';
+
+  // Build year list
+  const years=['all',...[...new Set(HIST.rows.map(r=>r.year))].sort()];
+
+  // Year tabs
+  const ytEl=document.getElementById('hist-year-tabs');
+  if(ytEl){
+    ytEl.innerHTML=years.map(y=>{
+      const active=HIST.filterYear===y;
+      return `<button onclick="setHistFilter('${y}','year')"
+        class="px-2.5 py-1 rounded-md text-xs font-semibold transition ${active?'dt-active':'dt-inactive'}"
+        style="${y!=='all'?'border:1px solid #e0ddd6':''}">${y==='all'?'All Years':y}</button>`;
+    }).join('');
+  }
+
+  // Team filter buttons
+  ['all','Timbers','Thorns'].forEach(t=>{
+    const el=document.getElementById('histf-'+(t==='all'?'all':t));
+    if(!el)return;
+    const active=HIST.filterTeam===t;
+    el.className='px-3 text-xs font-semibold transition'+(t!=='all'?' border-l border-stone-200':'')+(active?' dt-active':' dt-inactive');
+  });
+
+  // Filter rows
+  let rows=HIST.rows.filter(r=>{
+    if(HIST.filterYear!=='all'&&r.year!==HIST.filterYear)return false;
+    if(HIST.filterTeam!=='all'&&r.team!==HIST.filterTeam)return false;
+    return true;
+  });
+  rows=[...rows].sort((a,b)=>a.date.localeCompare(b.date));
+
+  // Summary
+  const totalOrders=rows.reduce((s,r)=>s+(+r.orders||0),0);
+  const totalSales=rows.reduce((s,r)=>s+(+r.netSales||0),0);
+  const totalUnits=rows.reduce((s,r)=>s+(+r.units||0),0);
+  const avgAOV=rows.length?rows.reduce((s,r)=>s+(+r.aov||0),0)/rows.filter(r=>r.aov).length:0;
+  const avgBasket=rows.length?rows.reduce((s,r)=>s+(+r.avgBasket||0),0)/rows.filter(r=>r.avgBasket).length:0;
+
+  const sumEl=document.getElementById('hist-summary');
+  if(sumEl) sumEl.innerHTML=`
+    <div class="dash-stat"><div class="dash-stat-num">${fmt$(totalSales)}</div><div class="dash-stat-label">Total Net Sales</div></div>
+    <div class="dash-stat"><div class="dash-stat-num">${fmtN(totalOrders)}</div><div class="dash-stat-label">Total Orders</div></div>
+    <div class="dash-stat"><div class="dash-stat-num">${fmtN(totalUnits)}</div><div class="dash-stat-label">Total Units</div></div>
+    <div class="dash-stat"><div class="dash-stat-num">${fmt$(avgAOV)}</div><div class="dash-stat-label">Avg AOV</div></div>
+  `;
+
+  const countEl=document.getElementById('hist-count');
+  if(countEl)countEl.textContent=`${rows.length} event${rows.length!==1?'s':''} · ${[...new Set(rows.map(r=>r.year))].sort().join(', ')}`;
+
+  // Table
+  const tbody=document.getElementById('hist-tbody');
+  if(!tbody)return;
+
+  let lastYear='';
+  tbody.innerHTML=rows.map(r=>{
+    const tc=TEAM_COLORS[r.team]||'#8a8a8a';
+    let yearSep='';
+    if(r.year!==lastYear){
+      lastYear=r.year;
+      yearSep=`<tr style="background:#f5f2ed">
+        <td colspan="10" style="padding:.35rem 1rem;font-size:.55rem;font-weight:700;letter-spacing:.2em;color:#a09a92">${r.year}</td>
+      </tr>`;
+    }
+    // Format date nicely
+    let dateStr=r.date;
+    try{const d=parseKey(r.date);dateStr=MONS_SHORT[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();}catch{}
+    // Parse event tag display: "Timbers:Portland-Seattle" → "Portland vs Seattle"
+    const tagParts=r.eventTag?r.eventTag.split(':'):'';
+    const matchup=tagParts.length>1?tagParts[1].replace('-',' vs '):r.eventTag||'—';
+
+    return yearSep+`<tr style="border-bottom:.5px solid #e0ddd6;transition:background .1s"
+      onmouseover="this.style.background='#f5f2ed'" onmouseout="this.style.background=''">
+      <td style="padding:.45rem .75rem;font-size:.7rem;font-weight:600;color:${tc}">${r.year}</td>
+      <td style="padding:.45rem .75rem;font-size:.7rem;white-space:nowrap">${dateStr}</td>
+      <td style="padding:.45rem .75rem;font-size:.7rem;color:#a09a92" class="hidden sm:table-cell">${r.day||'—'}</td>
+      <td style="padding:.45rem .75rem;font-size:.7rem">
+        <span style="font-size:.6rem;font-weight:600;color:${tc};margin-right:.3rem">${r.team||''}</span>
+        <span>${esc(matchup)}</span>
+      </td>
+      <td style="padding:.45rem .75rem;font-size:.7rem;text-align:right">${fmtN(r.orders)||'—'}</td>
+      <td style="padding:.45rem .75rem;font-size:.7rem;text-align:right;font-weight:600">${fmt$(r.netSales)}</td>
+      <td style="padding:.45rem .75rem;font-size:.7rem;text-align:right;color:#6a6460" class="hidden md:table-cell">${fmtN(r.units)||'—'}</td>
+      <td style="padding:.45rem .75rem;font-size:.7rem;text-align:right;color:#6a6460" class="hidden md:table-cell">${fmt$(r.aov)}</td>
+      <td style="padding:.45rem .75rem;font-size:.7rem;text-align:right;color:#6a6460" class="hidden lg:table-cell">${fmt$(r.avgBasket)}</td>
+      <td style="padding:.45rem .75rem" class="no-print">
+        <button onclick="deleteHistRow(${HIST.rows.indexOf(r)})"
+          style="font-size:.6rem;color:#a09a92;background:none;border:none;cursor:pointer"
+          onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a09a92'">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function deleteHistRow(idx){
+  HIST.rows.splice(idx,1);
+  save('historicals');
+  renderHistoricalsPage();
+}
+
+function clearHistoricals(){
+  if(!confirm('Delete all historical data?'))return;
+  HIST.rows=[];
+  save('historicals');
+  renderHistoricalsPage();
+}
+
+function importHistoricalsCSV(e){
+  const files=Array.from(e.target.files);
+  if(!files.length)return;
+  let totalAdded=0;
+  let pending=files.length;
+
+  files.forEach(file=>{
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const rows=parseCSVText(ev.target.result);
+      let added=0;
+      rows.forEach(r=>{
+        const n={};
+        Object.keys(r).forEach(k=>n[k.toLowerCase().replace(/[\s_\/]/g,'').replace(/[^a-z]/g,'')]=r[k]);
+
+        const year=(n.year||'').toString().trim();
+        const date=parseDate(n.date||n.gamedate||'');
+        if(!date&&!year)return;
+
+        const eventTag=(n.eventtag||n.event||n.tag||'').trim();
+        const team=histTeamFromTag(eventTag)||(n.team||'').trim();
+        // Parse opponent from tag: "Timbers:Portland-Seattle" → "Seattle"
+        let opponent='';
+        const tagSplit=eventTag.split(':');
+        if(tagSplit.length>1){
+          const match=tagSplit[1].split('-');
+          opponent=match.length>1?match[match.length-1].trim():tagSplit[1].trim();
+        }
+
+        const orders=parseInt((n.orders||'').replace(/,/g,''))||0;
+        const netSales=parseFloat((n.netsales||n.sales||n.netsale||'').replace(/[$,]/g,''))||0;
+        const units=parseInt((n.units||'').replace(/,/g,''))||0;
+        const aov=parseFloat((n.aov||n.averageordervalue||'').replace(/[$,]/g,''))||
+          (orders&&netSales?+(netSales/orders).toFixed(2):0);
+        const avgBasket=parseFloat((n.avgbasket||n.averagebasket||'').replace(/[$,]/g,''))||
+          (units&&netSales?+(netSales/units).toFixed(2):0);
+
+        // Derive day from date if available
+        let day=(n.day||'').trim();
+        if(!day&&date){try{day=DAYS_LONG[parseKey(date).getDay()];}catch{}}
+
+        // Derive year from date if not provided
+        const finalYear=year||(date?date.slice(0,4):'');
+
+        // Deduplicate by year+date+eventTag
+        const key=`${finalYear}|${date||''}|${eventTag}`;
+        if(HIST.rows.some(h=>`${h.year}|${h.date||''}|${h.eventTag}`===key))return;
+
+        HIST.rows.push({year:finalYear,day,date:date||'',eventTag,team,opponent,orders,netSales,units,aov,avgBasket});
+        added++;
+      });
+      totalAdded+=added;
+      pending--;
+      if(pending===0){
+        save('historicals');
+        setStatus(`${totalAdded} historical rows imported`,'ok');
+        if(S.view==='data') setDataTab('historicals');
+        else renderHistoricalsPage();
+      }
+    };
+    reader.readAsText(file);
+  });
+  e.target.value='';
+}
+
+function downloadHistoricalsTemplate(){
+  const csv=`Year,Day,Date,Event Tag,Orders,Net Sales,Units,AOV,Avg Basket\n2025,Saturday,2025-04-19,Timbers:Portland-Seattle,1243,87650,2180,70.51,40.21\n2025,Saturday,2025-05-03,Timbers:Portland-Vancouver,1187,82340,2050,69.37,40.17\n2024,Sunday,2024-04-14,Thorns:Portland-Chicago,980,65200,1820,66.53,35.82\n`;
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='historicals-template.csv';a.click();
   URL.revokeObjectURL(url);
 }
 
