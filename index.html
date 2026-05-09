@@ -3036,7 +3036,7 @@ function renderPlanningList(){
       `<span onclick="toggleEvtFilter(null)" class="team-badge"
         style="background:${allActive?'#1a181440':'#1a181410'};color:#1a1814;border:1.5px solid ${allActive?'#1a181480':'#1a181430'};${allActive?'font-weight:700':''}">All</span>`+
       allTeams.map(t=>{
-        const c=resolveColor('',t);
+        const c=getEvtGroupColor(t);
         const active=S.evtFilter===t;
         return `<span onclick="toggleEvtFilter('${t}')" class="team-badge"
           style="background:${c}${active?'40':'18'};color:${c};border:1.5px solid ${c}${active?'':'40'};${active?'font-weight:700':''}">${t}</span>`;
@@ -3355,7 +3355,7 @@ function renderChronoList(){
       `<span onclick="toggleEvtFilter(null)" class="team-badge"
         style="background:${allActive?'#1a181440':'#1a181410'};color:#1a1814;border:1.5px solid ${allActive?'#1a181480':'#1a181430'};${allActive?'font-weight:700':''}">All</span>`+
       allTeams.map(t=>{
-        const c=resolveColor('',t);
+        const c=getEvtGroupColor(t);
         const active=S.evtFilter===t;
         return `<span onclick="toggleEvtFilter('${t}')" class="team-badge"
           style="background:${c}${active?'40':'18'};color:${c};border:1.5px solid ${c}${active?'':'40'};${active?'font-weight:700':''}">${t}</span>`;
