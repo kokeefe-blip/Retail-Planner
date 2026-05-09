@@ -2025,7 +2025,8 @@ function goToday(){navigateTo(new Date());}
 function showHome(){
   document.body.dataset.view='home';
 
-  document.getElementById('cat-tabs-bar').style.display='none';  if(S.view==='daily'){clearTimeout(S.saveTimer);doSave();}
+  document.getElementById('cat-tabs-bar').style.display='none';
+  document.getElementById('catalog-view').style.display='none';  if(S.view==='daily'){clearTimeout(S.saveTimer);doSave();}
   if(S.listener){S.listener();S.listener=null;}
   S.view='home';
   document.getElementById('home-view').style.display='';
@@ -2040,7 +2041,8 @@ function showHome(){
 function showDaily(){
   document.body.dataset.view='daily';
 
-  document.getElementById('cat-tabs-bar').style.display='none';  S.view='daily';
+  document.getElementById('cat-tabs-bar').style.display='none';
+  document.getElementById('catalog-view').style.display='none';  S.view='daily';
   document.getElementById('home-view').style.display='none';
   document.getElementById('daily-view').style.display='';
   document.getElementById('month-view').style.display='none';
@@ -2118,7 +2120,8 @@ function showMonth(y,m){
   S.view='month';
   document.body.dataset.view='month';
 
-  document.getElementById('cat-tabs-bar').style.display='none';  document.getElementById('home-view').style.display='none';
+  document.getElementById('cat-tabs-bar').style.display='none';
+  document.getElementById('catalog-view').style.display='none';  document.getElementById('home-view').style.display='none';
   document.getElementById('daily-view').style.display='none';
   document.getElementById('month-view').style.display='block';
   document.getElementById('planning-view').style.display='none';
@@ -3410,7 +3413,8 @@ function showPlanning(){
   S.view='planning';
   document.body.dataset.view='planning';
 
-  document.getElementById('cat-tabs-bar').style.display='none';  document.getElementById('home-view').style.display='none';
+  document.getElementById('cat-tabs-bar').style.display='none';
+  document.getElementById('catalog-view').style.display='none';  document.getElementById('home-view').style.display='none';
   document.getElementById('daily-view').style.display='none';
   document.getElementById('month-view').style.display='none';
   document.getElementById('planning-view').style.display='block';
@@ -3426,7 +3430,8 @@ function showProjects(){
   S.view='projects';
   document.body.dataset.view='projects';
 
-  document.getElementById('cat-tabs-bar').style.display='none';  document.getElementById('home-view').style.display='none';
+  document.getElementById('cat-tabs-bar').style.display='none';
+  document.getElementById('catalog-view').style.display='none';  document.getElementById('home-view').style.display='none';
   document.getElementById('daily-view').style.display='none';
   document.getElementById('month-view').style.display='none';
   document.getElementById('planning-view').style.display='none';
@@ -4475,7 +4480,8 @@ function showData(){
   S.view='data';
   document.body.dataset.view='data';
 
-  document.getElementById('cat-tabs-bar').style.display='none';  ['home-view','daily-view','month-view','planning-view','projects-view'].forEach(id=>{
+  document.getElementById('cat-tabs-bar').style.display='none';
+  document.getElementById('catalog-view').style.display='none';  ['home-view','daily-view','month-view','planning-view','projects-view'].forEach(id=>{
     document.getElementById(id).style.display='none';
   });
   document.getElementById('data-view').style.display='block';
