@@ -2305,37 +2305,13 @@ function renderHomeGrid(){
       const dk=`${y}-${String(m+1).padStart(2,'0')}-${String(n).padStart(2,'0')}`;
       const evts=S.events.filter(e=>e.date===dk);
       const isDue=KS.cards.some(c=>c.date===dk);
-      const ring=evts.length?` hcal-evt" style="border:1.5px solid ${evts[0].colorHex}`:``;
+      const ring=evts.length?` hcal-evt" style="border:1.5px solid ${getEvtGroupColor(evts[0].team)||evts[0].colorHex}`:``;
       const projCls=isDue&&!cls?' hcal-proj':'';
-      // Show promotion as tooltip on hover
       const tip=evts.length?(evts.map(e=>[e.team,e.opponent?`vs ${e.opponent}`:'',e.promotion].filter(Boolean).join(' · ')).join('\n')):'';
       html+=`<div class="hcal-cell ${cls}${projCls}${ring}" onclick="navigateTo(new Date(${y},${m},${n}))"${tip?` title="${tip.replace(/"/g,'&quot;')}"`:''} >${n}</div>`;
     }
     for(let i=1;i<=trail;i++) html+=`<div class="hcal-cell hcal-other">${i}</div>`;
     html+=`</div>`;
-
-    // Show events list below the mini-calendar
-    const monthEvts=S.events.filter(e=>e.date.startsWith(`${y}-${String(m+1).padStart(2,'0')}`))
-      .sort((a,b)=>a.date.localeCompare(b.date));
-    if(monthEvts.length){
-      html+=`<div style="margin-top:.6rem;border-top:1px solid #e8e4dc;padding-top:.5rem;display:flex;flex-direction:column;gap:.2rem">`;
-      monthEvts.forEach(e=>{
-        try{
-          const d2=parseKey(e.date);
-          const dateLabel=`${d2.getDate()}`;
-          const matchup=e.opponent?`vs ${e.opponent}`:'';
-          const promo=e.promotion||'';
-          html+=`<div style="display:flex;align-items:baseline;gap:.3rem;font-size:.55rem;line-height:1.35;cursor:pointer"
-            onclick="navigateTo(new Date(${y},${m},${d2.getDate()}))">
-            <span style="font-weight:700;color:${e.colorHex};flex-shrink:0;min-width:1.2rem">${dateLabel}</span>
-            <span style="color:${e.colorHex};font-weight:600;flex-shrink:0">${e.team||''}</span>
-            ${matchup?`<span style="color:#6a6460;flex-shrink:0">${matchup}</span>`:''}
-            ${promo?`<span style="color:#a09a92;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${promo}</span>`:''}
-          </div>`;
-        }catch{}
-      });
-      html+=`</div>`;
-    }
 
     card.innerHTML=html;grid.appendChild(card);
   }
@@ -3228,7 +3204,7 @@ function saveEvtModal(){
   e.kickoff=document.getElementById('ef-kickoff').value.trim();
   e.initiative='';
   const sel=document.querySelector('#ef-color-swatches .col-swatch.selected');
-  e.colorHex=sel?sel.dataset.color:resolveColor('',e.team);
+  e.colorHex=sel?sel.dataset.color:getEvtGroupColor(e.team);
   e.subject=e.opponent?`${e.team} vs ${e.opponent}`:(e.promotion||e.team);
   e.callHour=parseHour(e.callTime);
   e.gatesHour=parseHour(e.gates);
@@ -3526,22 +3502,15 @@ function allDisplayEvents(){
 /* Refresh all calendar surfaces that display events.
    Called whenever S.events changes (upload, edit, delete, Firebase sync). */
 function refreshCalendarEvents(){
-  switch(S.view){
-    case 'home':
-      renderHomeGrid();
-      break;
-    case 'month':
-      renderMonthGrid();
-      break;
-    case 'daily':
-      renderCalHeader();                        // mini-cal rings
-      applyEventsToSchedule(S.current);         // schedule tags + matchup
-      applyProjectReminders(S.current);         // notes strip reminders
-      updateCalDataSummary(S.current);          // sales summary
-      break;
-    case 'planning':
-      // Events page — renderPlanningList already called in after()
-      break;
+  // Always update home grid (event rings) regardless of current view
+  renderHomeGrid();
+  // Update whichever other view is currently visible
+  if(S.view==='month') renderMonthGrid();
+  if(S.view==='daily'){
+    renderCalHeader();
+    applyEventsToSchedule(S.current);
+    applyProjectReminders(S.current);
+    updateCalDataSummary(S.current);
   }
 }
 
@@ -6863,6 +6832,7 @@ function setEvtGroupColor(hex){
   saveEvents();
   closeEvtColorPicker();
   renderPlanningList();
+  if(_evtActiveTab==='chrono')renderChronoList();
   refreshCalendarEvents();
 }
 
@@ -6875,7 +6845,7 @@ function resetEvtGroupColor(){
   if(!_ecpGroup)return;
   delete _evtGroupColors[_ecpGroup];
   saveEvtGroupColors();
-  // Restore original colors on events
+  // Restore original team colors on all events in this group
   S.events.forEach(e=>{
     const src=e._fromIcal?(e.team||'Calendar Feed'):(e.team||'Unknown');
     if(src===_ecpGroup)e.colorHex=resolveColor('',e.team);
@@ -6883,6 +6853,7 @@ function resetEvtGroupColor(){
   saveEvents();
   closeEvtColorPicker();
   renderPlanningList();
+  if(_evtActiveTab==='chrono')renderChronoList();
   refreshCalendarEvents();
 }
 
