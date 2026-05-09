@@ -1007,9 +1007,18 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
               class="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-xs text-stone-800 outline-none focus:border-stone-400"
               style="font-family:inherit"/>
             <button onclick="saveIcalFeed()" class="px-4 py-2 rounded-lg bg-stone-900 text-white text-xs font-semibold hover:bg-stone-700 transition flex-shrink-0">Add Feed</button>
+            <button onclick="testIcalUrl()" class="px-3 py-2 rounded-lg border border-stone-200 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition flex-shrink-0">Test</button>
             <button id="ical-sync-btn" onclick="syncIcalFeed(true)" style="display:none" class="px-3 py-2 rounded-lg border border-stone-200 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition flex-shrink-0">↻ Sync</button>
           </div>
           <div id="ical-feed-status" style="margin-top:.4rem;font-size:.65rem;color:#a09a92;min-height:1rem"></div>
+          <!-- Format tip — shown when connection fails -->
+          <div id="ical-url-tip" style="display:none;margin-top:.5rem;background:#fef9ec;border:1px solid #f0d98a;border-radius:8px;padding:.6rem .75rem">
+            <p style="font-size:.65rem;font-weight:600;color:#92400e;margin-bottom:.3rem">📅 How to get the right link:</p>
+            <p style="font-size:.62rem;color:#92400e;margin-bottom:.2rem"><strong>Google Calendar:</strong> Open calendar → ⋮ → Settings → "Secret address in iCal format" → copy that URL</p>
+            <p style="font-size:.62rem;color:#92400e;margin-bottom:.2rem"><strong>Apple iCloud:</strong> Calendar app → Share → "Public Calendar" → copy the webcal:// link</p>
+            <p style="font-size:.62rem;color:#92400e;margin-bottom:.2rem"><strong>Outlook:</strong> Settings → Calendar → Shared calendars → "Publish a calendar" → ICS link</p>
+            <p style="font-size:.62rem;color:#92400e">The URL should end in <code style="background:#fde68a;padding:0 3px;border-radius:2px">.ics</code> or contain <code style="background:#fde68a;padding:0 3px;border-radius:2px">ical</code></p>
+          </div>
           <div id="ical-feeds-list" style="margin-top:.5rem"></div>
         </div>
 
@@ -2759,6 +2768,11 @@ const HIST={
   filterTeam:'all',
 };
 
+const IC={
+  feeds:[],
+  syncTimer:null,
+};
+
 const STORES={
   events:{
     shared: false,
@@ -2832,7 +2846,9 @@ const STORES={
       renderIcalFeedsList();
       if(IC.feeds.length){
         startIcalAutoSync();
-        syncAllFeeds().catch(console.warn);
+        // Only sync feeds that have never been synced or failed
+        const needsSync=IC.feeds.some(f=>!f.lastSync||f.status==='error');
+        if(needsSync)syncAllFeeds().catch(console.warn);
       }
     }
   },
@@ -5150,10 +5166,6 @@ function clearProductData(){
 /* ══════════════════════════════════════════
    iCAL FEED SYNC
 ══════════════════════════════════════════ */
-const IC={
-  feeds:[],
-  syncTimer:null,
-};
 
 // Multiple CORS proxies — tried in order until one works
 const ICAL_PROXIES=[
@@ -5163,20 +5175,89 @@ const ICAL_PROXIES=[
 ];
 const ICAL_INTERVAL=60*60*1000;
 
+/* Normalize any calendar URL to a fetchable iCal URL */
+function normalizeCalendarUrl(raw){
+  let url=raw.trim();
+
+  // webcal:// → https://
+  url=url.replace(/^webcal:\/\//i,'https://');
+
+  // Google Calendar embed link → iCal URL
+  // https://calendar.google.com/calendar/embed?src=xxx → basic.ics
+  if(/calendar\.google\.com\/calendar\/embed/i.test(url)){
+    try{
+      const u=new URL(url);
+      const src=u.searchParams.get('src');
+      if(src){
+        url=`https://calendar.google.com/calendar/ical/${encodeURIComponent(src)}/public/basic.ics`;
+      }
+    }catch{}
+  }
+
+  // Google Calendar /r link → strip to just get the base
+  // User may have pasted: https://calendar.google.com/calendar/r
+  // This can't be converted without knowing their calendar ID — warn them
+  if(/calendar\.google\.com\/calendar\/r(\?|$)/i.test(url)){
+    // Can't convert — return as-is and let the proxy attempt it
+    return url;
+  }
+
+  // Outlook/Office 365 personal calendar
+  // https://outlook.live.com/calendar/0/view/month → not useful
+  // https://outlook.live.com/owa/calendar/.../calendar.ics → already ics
+
+  // Apple iCloud — usually already .ics
+  // webcal://p08-caldav.icloud.com/... → handled by webcal→https above
+
+  // Ensure the URL ends up reachable
+  return url;
+}
+
 async function fetchWithFallback(url){
+  const normalized=normalizeCalendarUrl(url);
   let lastErr='';
   for(const proxyFn of ICAL_PROXIES){
     try{
-      const resp=await fetch(proxyFn(url),{signal:AbortSignal.timeout(12000)});
+      const resp=await fetch(proxyFn(normalized),{signal:AbortSignal.timeout(15000)});
       if(!resp.ok){lastErr=`HTTP ${resp.status}`;continue;}
       const text=await resp.text();
-      if(!text.includes('BEGIN:VCALENDAR')&&!text.includes('BEGIN:VEVENT')){
-        lastErr='Response is not iCal format';continue;
+      // Accept if it looks like iCal
+      if(text.includes('BEGIN:VCALENDAR')||text.includes('BEGIN:VEVENT')){
+        return text;
       }
-      return text;
+      // If response looks like an HTML redirect or error page, try next proxy
+      lastErr='Response is not iCal data';
     }catch(e){lastErr=e.message;}
   }
-  throw new Error(lastErr||'All proxies failed');
+  // Last resort: try the URL directly (works if server has CORS headers)
+  try{
+    const resp=await fetch(normalized,{signal:AbortSignal.timeout(10000)});
+    if(resp.ok){
+      const text=await resp.text();
+      if(text.includes('BEGIN:VCALENDAR')||text.includes('BEGIN:VEVENT'))return text;
+    }
+  }catch{}
+  throw new Error(lastErr||'Could not fetch calendar data');
+}
+
+async function testIcalUrl(){
+  const raw=(document.getElementById('ical-url-input').value||'').trim();
+  if(!raw){setIcalStatus('Enter a URL first.',false);return;}
+  const url=normalizeCalendarUrl(raw);
+  const changed=url!==raw;
+  setIcalStatus(`Testing${changed?' (converted to: '+url.slice(0,60)+'...)':''}…`);
+  try{
+    const text=await fetchWithFallback(raw);
+    const events=parseIcal(text);
+    const lines=text.split('\n').length;
+    if(changed)document.getElementById('ical-url-input').value=url;
+    setIcalStatus(`✓ Connected — ${events.length} events found. Click "Add Feed" to import.`,true);
+  }catch(e){
+    setIcalStatus(`✗ ${e.message} — try copying the iCal/ICS export link instead (see tip below)`,false);
+    // Show the help tip
+    const tipEl=document.getElementById('ical-url-tip');
+    if(tipEl)tipEl.style.display='';
+  }
 }
 
 function updateFeedName(idx,name){
@@ -5360,20 +5441,38 @@ async function syncAllFeeds(){
 async function fetchAndMergeIcal(feed){
   const text=await fetchWithFallback(feed.url);
   const events=parseIcal(text);
-  if(!events.length)return 0;
-  const existing=new Set(S.events.map(e=>e.date+'|'+(e.subject||'').toLowerCase().trim()));
+
+  // Remove stale events from this feed before re-adding
+  const prevCount=S.events.filter(e=>e._feedName===feed.name).length;
+  S.events=S.events.filter(e=>e._feedName!==feed.name);
+
+  // Add all parsed events with feed identity
   let added=0;
+  // Deduplicate against non-feed events only
+  const existing=new Set(
+    S.events.filter(e=>!e._fromIcal).map(e=>e.date+'|'+(e.subject||'').toLowerCase().trim())
+  );
   events.forEach(e=>{
     const k=e.date+'|'+(e.subject||'').toLowerCase().trim();
+    e._fromIcal=true;
+    e._feedName=feed.name||'Calendar Feed';
+    e._feedColor=feed.color||'#7a9eb5';
+    e.colorHex=feed.color||e.colorHex||'#7a9eb5';
     if(!existing.has(k)){
-      e._fromIcal=true;
-      e._feedName=feed.name||'Calendar Feed';
-      e._feedColor=feed.color||'#7a9eb5';
-      e.colorHex=feed.color||e.colorHex||'#7a9eb5';
-      S.events.push(e);existing.add(k);added++;
+      S.events.push(e);existing.add(k);
+    } else {
+      // Event conflicts with CSV event — still add but marked as ical
+      S.events.push(e);
     }
+    added++;
   });
-  if(added>0){saveEvents();refreshCalendarEvents();renderPlanningList();}
+
+  if(added>0||prevCount>0){
+    saveEvents();
+    refreshCalendarEvents();
+    renderPlanningList();
+    if(_evtActiveTab==='chrono')renderChronoList();
+  }
   return added;
 }
 
