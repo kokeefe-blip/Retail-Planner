@@ -839,6 +839,11 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Print
       </button>
+      <!-- Manual add event button -->
+      <button onclick="openEvtModal(-1)" class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-semibold hover:bg-stone-700 transition no-print">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Event
+      </button>
       <button onclick="clearEvents()" class="text-xs text-stone-400 hover:text-red-500 transition font-medium no-print" id="clear-events-btn" style="display:none">Clear All</button>
     </div>
 
@@ -1508,10 +1513,6 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
         <input id="ef-promotion" type="text" class="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-stone-400" style="font-family:inherit"/>
       </div>
       <div>
-        <label class="section-label block mb-1">Initiative</label>
-        <input id="ef-initiative" type="text" class="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-stone-400" style="font-family:inherit"/>
-      </div>
-      <div>
         <label class="section-label block mb-1">Call Time</label>
         <input id="ef-calltime" type="text" placeholder="5:15 PM" class="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-stone-400" style="font-family:inherit"/>
       </div>
@@ -1529,7 +1530,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
       </div>
     </div>
     <div class="flex items-center justify-between px-6 py-4" style="border-top:1px solid #e0ddd6">
-      <button onclick="deleteEvt()" class="text-xs text-red-400 hover:text-red-600 font-medium transition">Delete event</button>
+      <button id="evt-modal-delete" onclick="deleteEvt()" class="text-xs text-red-400 hover:text-red-600 font-medium transition">Delete event</button>
       <div class="flex gap-2">
         <button onclick="closeEvtModal()" class="px-4 py-2 rounded-lg border border-stone-200 text-xs text-stone-500 font-semibold">Cancel</button>
         <button onclick="saveEvtModal()" class="px-4 py-2 rounded-lg bg-stone-900 text-white text-xs font-semibold hover:bg-stone-700 transition">Save</button>
@@ -2115,14 +2116,40 @@ function renderHomeGrid(){
     for(let n=1;n<=d;n++){
       const cls=isToday(new Date(y,m,n))?'hcal-today':'';
       const dk=`${y}-${String(m+1).padStart(2,'0')}-${String(n).padStart(2,'0')}`;
-      const evts=S.events.filter(e=>e.date===dk); // game events only
-      const isDue=KS.cards.some(c=>c.date===dk);   // project due date
+      const evts=S.events.filter(e=>e.date===dk);
+      const isDue=KS.cards.some(c=>c.date===dk);
       const ring=evts.length?` hcal-evt" style="border:1.5px solid ${evts[0].colorHex}`:``;
       const projCls=isDue&&!cls?' hcal-proj':'';
-      html+=`<div class="hcal-cell ${cls}${projCls}${ring}" onclick="navigateTo(new Date(${y},${m},${n}))">${n}</div>`;
+      // Show promotion as tooltip on hover
+      const tip=evts.length?(evts.map(e=>[e.team,e.opponent?`vs ${e.opponent}`:'',e.promotion].filter(Boolean).join(' · ')).join('\n')):'';
+      html+=`<div class="hcal-cell ${cls}${projCls}${ring}" onclick="navigateTo(new Date(${y},${m},${n}))"${tip?` title="${tip.replace(/"/g,'&quot;')}"`:''} >${n}</div>`;
     }
     for(let i=1;i<=trail;i++) html+=`<div class="hcal-cell hcal-other">${i}</div>`;
     html+=`</div>`;
+
+    // Show events list below the mini-calendar
+    const monthEvts=S.events.filter(e=>e.date.startsWith(`${y}-${String(m+1).padStart(2,'0')}`))
+      .sort((a,b)=>a.date.localeCompare(b.date));
+    if(monthEvts.length){
+      html+=`<div style="margin-top:.6rem;border-top:1px solid #e8e4dc;padding-top:.5rem;display:flex;flex-direction:column;gap:.2rem">`;
+      monthEvts.forEach(e=>{
+        try{
+          const d2=parseKey(e.date);
+          const dateLabel=`${d2.getDate()}`;
+          const matchup=e.opponent?`vs ${e.opponent}`:'';
+          const promo=e.promotion||'';
+          html+=`<div style="display:flex;align-items:baseline;gap:.3rem;font-size:.55rem;line-height:1.35;cursor:pointer"
+            onclick="navigateTo(new Date(${y},${m},${d2.getDate()}))">
+            <span style="font-weight:700;color:${e.colorHex};flex-shrink:0;min-width:1.2rem">${dateLabel}</span>
+            <span style="color:${e.colorHex};font-weight:600;flex-shrink:0">${e.team||''}</span>
+            ${matchup?`<span style="color:#6a6460;flex-shrink:0">${matchup}</span>`:''}
+            ${promo?`<span style="color:#a09a92;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${promo}</span>`:''}
+          </div>`;
+        }catch{}
+      });
+      html+=`</div>`;
+    }
+
     card.innerHTML=html;grid.appendChild(card);
   }
 }
@@ -2405,15 +2432,23 @@ const COLOR_NAMES={
 
 function teamColor(team){
   if(!team)return PALETTE[0];
+  const u=team.toUpperCase();
+  if(u.includes('TIMBERS'))return '#7a9e7e'; // sage — always Timbers
+  if(u.includes('THORNS'))return '#d4856a';  // coral — always Thorns
   let h=0;for(let i=0;i<team.length;i++)h=(h*31+team.charCodeAt(i))&0xffff;
   return PALETTE[h%PALETTE.length];
 }
 
 function resolveColor(colorStr,team){
+  // Known teams always get their fixed color regardless of CSV color column
+  if(team){
+    const u=team.toUpperCase();
+    if(u.includes('TIMBERS'))return '#7a9e7e';
+    if(u.includes('THORNS'))return '#d4856a';
+  }
   if(!colorStr)return teamColor(team);
   const k=colorStr.trim().toLowerCase();
   if(COLOR_NAMES[k])return COLOR_NAMES[k];
-  // Try with spaces removed (handles "Light Greeen" → "lightgreeen")
   const kc=k.replace(/\s+/g,'');
   if(COLOR_NAMES[kc])return COLOR_NAMES[kc];
   if(/^#[0-9a-f]{3,6}$/i.test(colorStr))return colorStr;
@@ -2958,21 +2993,26 @@ let _evtEditIdx=-1;
 
 function openEvtModal(idx){
   _evtEditIdx=idx;
-  const e=S.events[idx];if(!e)return;
+  const isNew=idx===-1;
+  const e=isNew?{}:S.events[idx];
+  if(!isNew&&!e)return;
+
+  document.querySelector('#evt-modal h3').textContent=isNew?'New Event':'Edit Event';
+  const delBtn=document.getElementById('evt-modal-delete');
+  if(delBtn)delBtn.style.display=isNew?'none':'';
 
   document.getElementById('ef-date').value=e.date||'';
   document.getElementById('ef-day').value=e.day||'';
   document.getElementById('ef-team').value=e.team||'';
   document.getElementById('ef-opponent').value=e.opponent||'';
   document.getElementById('ef-promotion').value=e.promotion||'';
-  document.getElementById('ef-initiative').value=e.initiative||'';
   document.getElementById('ef-calltime').value=e.callTime||'';
   document.getElementById('ef-gates').value=e.gates||'';
   document.getElementById('ef-kickoff').value=e.kickoff||'';
 
-  // Color swatches
+  // Color swatches — default to team color for new events
   const swEl=document.getElementById('ef-color-swatches');
-  const curColor=e.colorHex;
+  const curColor=e.colorHex||'';
   swEl.innerHTML=Object.entries({coral:'#d4856a',blue:'#7a9eb5',sage:'#7a9e7e',amber:'#c9a84c',mauve:'#9e7a9e',rose:'#c47a8a',teal:'#5a9e9e',brown:'#b5956a'})
     .map(([name,hex])=>`<span class="col-swatch${curColor===hex?' selected':''}"
       style="background:${hex}" data-color="${hex}" title="${name}"
@@ -2985,47 +3025,40 @@ function openEvtModal(idx){
 function closeEvtModal(){document.getElementById('evt-modal').style.display='none';}
 
 function saveEvtModal(){
-  if(_evtEditIdx<0||_evtEditIdx>=S.events.length)return;
-  const e=S.events[_evtEditIdx];
+  const e=_evtEditIdx===-1?{}:S.events[_evtEditIdx];
+  if(_evtEditIdx!==-1&&!e)return;
   e.date=document.getElementById('ef-date').value;
-  // Auto-derive day from date — override manual entry
+  // Auto-derive day from date
   try{e.day=DAYS_LONG[parseKey(e.date).getDay()];}
   catch{e.day=document.getElementById('ef-day').value;}
   e.team=document.getElementById('ef-team').value.trim();
   e.opponent=document.getElementById('ef-opponent').value.trim();
   e.promotion=document.getElementById('ef-promotion').value.trim();
-  e.initiative=document.getElementById('ef-initiative').value.trim();
   e.callTime=document.getElementById('ef-calltime').value.trim();
   e.gates=document.getElementById('ef-gates').value.trim();
   e.kickoff=document.getElementById('ef-kickoff').value.trim();
-
+  e.initiative='';
   const sel=document.querySelector('#ef-color-swatches .col-swatch.selected');
-  if(sel)e.colorHex=sel.dataset.color;
-
-  // Recalculate derived fields
+  e.colorHex=sel?sel.dataset.color:resolveColor('',e.team);
+  e.subject=e.opponent?`${e.team} vs ${e.opponent}`:(e.promotion||e.team);
   e.callHour=parseHour(e.callTime);
   e.gatesHour=parseHour(e.gates);
   e.kickoffHour=parseHour(e.kickoff);
-  e.subject=e.opponent?`${e.team} vs ${e.opponent}`:(e.promotion||e.team);
-
-  closeEvtModal();
+  if(_evtEditIdx===-1){
+    if(!e.date){alert('Please enter a date.');return;}
+    S.events.push(e);
+  }
   saveEvents();
-  renderPlanningList();
-  if(S.view==='home')renderHomeGrid();
-  else if(S.view==='month')renderMonthGrid();
-  else if(S.view==='daily'){renderCalHeader();applyEventsToSchedule(S.current);}
 }
 
 function deleteEvt(){
   if(_evtEditIdx<0)return;
-  if(!confirm('Delete this event?'))return;
+  if(!confirm('Delete this event?\n\nThis cannot be undone.'))return;
   S.events.splice(_evtEditIdx,1);
   saveEvents();
   closeEvtModal();
   renderPlanningList();
-  if(S.view==='home')renderHomeGrid();
-  else if(S.view==='month')renderMonthGrid();
-  else if(S.view==='daily'){renderCalHeader();applyEventsToSchedule(S.current);}
+  refreshCalendarEvents();
 }
 
 function applyEventsToSchedule(date){
