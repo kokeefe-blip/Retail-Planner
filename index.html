@@ -152,8 +152,16 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
   -webkit-print-color-adjust:exact;
   print-color-adjust:exact;
 }
-/* Project due date — gray filled square, rounded corners */
-.hcal-proj{
+/* iCal events on year calendar — colored filled square */
+.hcal-ical{
+  border-radius:3px!important;
+  -webkit-print-color-adjust:exact;
+  print-color-adjust:exact;
+}
+/* If both iCal square and game event ring on same day — circle wins */
+.hcal-ical.hcal-evt{
+  border-radius:50%!important;
+}
   background:#d4d0c8;
   border-radius:3px!important;
   color:#1a1814;
@@ -2303,12 +2311,26 @@ function renderHomeGrid(){
     for(let n=1;n<=d;n++){
       const cls=isToday(new Date(y,m,n))?'hcal-today':'';
       const dk=`${y}-${String(m+1).padStart(2,'0')}-${String(n).padStart(2,'0')}`;
-      const evts=S.events.filter(e=>e.date===dk);
+      const evts=S.events.filter(e=>e.date===dk&&!e._fromIcal);   // game events only → rings
+      const icalEvts=S.events.filter(e=>e.date===dk&&e._fromIcal); // iCal events → squares
       const isDue=KS.cards.some(c=>c.date===dk);
-      const ring=evts.length?` hcal-evt" style="border:1.5px solid ${getEvtGroupColor(evts[0].team)||evts[0].colorHex}`:``;
-      const projCls=isDue&&!cls?' hcal-proj':'';
-      const tip=evts.length?(evts.map(e=>[e.team,e.opponent?`vs ${e.opponent}`:'',e.promotion].filter(Boolean).join(' · ')).join('\n')):'';
-      html+=`<div class="hcal-cell ${cls}${projCls}${ring}" onclick="navigateTo(new Date(${y},${m},${n}))"${tip?` title="${tip.replace(/"/g,'&quot;')}"`:''} >${n}</div>`;
+      // Build class and style
+      let cellCls=`hcal-cell ${cls}`;
+      let cellStyle='';
+      if(isDue&&!cls)cellCls+=' hcal-proj';
+      if(icalEvts.length&&!evts.length&&!cls){
+        // iCal event on this day — colored square
+        cellCls+=' hcal-ical';
+        cellStyle=`background:${icalEvts[0].colorHex}30;border:1.5px solid ${icalEvts[0].colorHex}`;
+      }
+      if(evts.length&&!cls){
+        // Game event — circle ring (may override square)
+        cellCls+=' hcal-evt';
+        cellStyle=`border:1.5px solid ${getEvtGroupColor(evts[0].team)||evts[0].colorHex}`;
+      }
+      const styleAttr=cellStyle?` style="${cellStyle}"`:'';
+      const tip=[...evts,...icalEvts].map(e=>[e._feedName||e.team,e.opponent?`vs ${e.opponent}`:'',e.promotion].filter(Boolean).join(' · ')).join('\n');
+      html+=`<div class="${cellCls}"${styleAttr} onclick="navigateTo(new Date(${y},${m},${n}))"${tip?` title="${tip.replace(/"/g,'&quot;')}"`:''} >${n}</div>`;
     }
     for(let i=1;i<=trail;i++) html+=`<div class="hcal-cell hcal-other">${i}</div>`;
     html+=`</div>`;
@@ -3003,31 +3025,38 @@ function renderPlanningList(){
   if(emptyState)emptyState.style.display='none';
   if(groupsWrap)groupsWrap.style.display='';
 
-  // Build team filter badges
-  const allTeams=[...new Set(S.events.map(e=>e.team).filter(Boolean))].sort();
+  // Build team filter badges — game teams + iCal feed names
+  const allTeams=[...new Set(S.events.filter(e=>!e._fromIcal).map(e=>e.team).filter(Boolean))].sort();
+  const allFeeds=[...new Set(S.events.filter(e=>e._fromIcal).map(e=>e._feedName||'Calendar Feed').filter(Boolean))].sort();
+  const allGroups=[...allTeams,...allFeeds];
   const allActive=!S.evtFilter;
   const tfEl=document.getElementById('team-filters');
   if(tfEl){
     tfEl.innerHTML=
       `<span onclick="toggleEvtFilter(null)" class="team-badge"
         style="background:${allActive?'#1a181440':'#1a181410'};color:#1a1814;border:1.5px solid ${allActive?'#1a181480':'#1a181430'};${allActive?'font-weight:700':''}">All</span>`+
-      allTeams.map(t=>{
+      allGroups.map(t=>{
         const c=getEvtGroupColor(t);
         const active=S.evtFilter===t;
+        const isIcal=allFeeds.includes(t);
         return `<span onclick="toggleEvtFilter('${t}')" class="team-badge"
-          style="background:${c}${active?'40':'18'};color:${c};border:1.5px solid ${c}${active?'':'40'};${active?'font-weight:700':''}">${t}</span>`;
+          style="background:${c}${active?'40':'18'};color:${c};border:1.5px solid ${c}${active?'':'40'};${active?'font-weight:700':''}">
+          ${isIcal?`<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:2px;vertical-align:middle"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`:''}${t}</span>`;
       }).join('');
   }
 
   // Filter events
-  let filtered=S.evtFilter?S.events.filter(e=>e.team===S.evtFilter):S.events;
+  let filtered=S.evtFilter?S.events.filter(e=>{
+    const grp=e._fromIcal?(e._feedName||'Calendar Feed'):(e.team||'Unknown');
+    return grp===S.evtFilter||e.team===S.evtFilter;
+  }):S.events;
   filtered=[...filtered].sort((a,b)=>a.date.localeCompare(b.date));
   if(countLbl)countLbl.textContent=(S.evtFilter?`${S.evtFilter} · `:'')+filtered.length+' event'+(filtered.length!==1?'s':'');
 
-  // Group by team / source
+  // Group by team / source — iCal events group by feed name
   const groups={};
   filtered.forEach(e=>{
-    const src=e._fromIcal?(e.team||'Calendar Feed'):(e.team||'Unknown');
+    const src=e._fromIcal?(e._feedName||'Calendar Feed'):(e.team||'Unknown');
     if(!groups[src])groups[src]=[];
     groups[src].push(e);
   });
@@ -5129,12 +5158,42 @@ const IC={
 const ICAL_PROXY='https://api.allorigins.win/raw?url=';
 const ICAL_INTERVAL=60*60*1000; // 1 hour
 
+function updateFeedName(idx, name){
+  if(!IC.feeds[idx])return;
+  const oldName=IC.feeds[idx].name;
+  IC.feeds[idx].name=name.trim()||'Calendar Feed';
+  // Update _feedName on all events from this feed
+  S.events.forEach(e=>{if(e._feedName===oldName)e._feedName=IC.feeds[idx].name;});
+  save('icalFeeds');
+  saveEvents();
+  renderPlanningList();
+  if(_evtActiveTab==='chrono')renderChronoList();
+  refreshCalendarEvents();
+}
+
+function updateFeedColor(idx, color){
+  if(!IC.feeds[idx])return;
+  const name=IC.feeds[idx].name;
+  IC.feeds[idx].color=color;
+  // Update colorHex on all events from this feed
+  S.events.forEach(e=>{if(e._feedName===name){e._feedColor=color;e.colorHex=color;}});
+  save('icalFeeds');
+  saveEvents();
+  renderIcalFeedsList();
+  renderPlanningList();
+  if(_evtActiveTab==='chrono')renderChronoList();
+  refreshCalendarEvents();
+}
+
 function saveIcalFeed(){
   const url=(document.getElementById('ical-url-input').value||'').trim();
   if(!url){setIcalStatus('Please enter a feed URL.');return;}
   if(!url.startsWith('http')){setIcalStatus('URL must start with http:// or https://');return;}
   if(IC.feeds.find(f=>f.url===url)){setIcalStatus('This feed is already added.');return;}
-  IC.feeds.push({url,name:'Calendar Feed',team:'',color:'',lastSync:null,eventCount:0});
+  // Generate a distinct color for each feed
+  const feedColors=['#7a9eb5','#9e7a9e','#c9a84c','#5a9e9e','#c47a8a','#b5956a','#d4856a','#7a9e7e'];
+  const color=feedColors[IC.feeds.length%feedColors.length];
+  IC.feeds.push({url,name:'Calendar Feed',team:'',color,lastSync:null,eventCount:0});
   save('icalFeeds');
   renderIcalFeedsList();
   document.getElementById('ical-url-input').value='';
@@ -5165,14 +5224,22 @@ function renderIcalFeedsList(){
   if(!IC.feeds.length){el.innerHTML='';return;}
   el.innerHTML=IC.feeds.map((f,i)=>{
     const lastSync=f.lastSync?`Last synced ${timeSince(f.lastSync)}`:'Not yet synced';
-    const evtTxt=f.eventCount?`${f.eventCount} events imported`:'';
-    return `<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem .65rem;background:#f5f2ed;border-radius:8px;margin-bottom:.3rem">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#a09a92" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:.68rem;font-weight:600;color:#1a1814;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.url)}</div>
-        <div style="font-size:.58rem;color:#a09a92">${lastSync}${evtTxt?' · '+evtTxt:''}</div>
-      </div>
-      <button onclick="removeIcalFeed(${i})" style="font-size:.65rem;color:#a09a92;background:none;border:none;cursor:pointer;flex-shrink:0;padding:.1rem .2rem" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a09a92'">✕</button>
+    const evtTxt=f.eventCount?`${f.eventCount} events`:''
+    const color=f.color||'#7a9eb5';
+    return `<div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .65rem;background:#f5f2ed;border-radius:8px;margin-bottom:.3rem;border-left:3px solid ${color}">
+      <!-- Color swatch — click to change -->
+      <input type="color" value="${color}" title="Change feed color"
+        onchange="updateFeedColor(${i},this.value)"
+        style="width:18px;height:18px;border:none;border-radius:3px;cursor:pointer;padding:0;flex-shrink:0;background:none"/>
+      <!-- Editable name -->
+      <input type="text" value="${esc(f.name||'Calendar Feed')}"
+        onchange="updateFeedName(${i},this.value)"
+        onblur="updateFeedName(${i},this.value)"
+        style="flex:1;border:none;background:transparent;font-size:.68rem;font-weight:600;color:#1a1814;font-family:inherit;outline:none;min-width:0"
+        placeholder="Feed name"/>
+      <span style="font-size:.58rem;color:#a09a92;flex-shrink:0">${lastSync}${evtTxt?' · '+evtTxt:''}</span>
+      <button onclick="removeIcalFeed(${i})" style="font-size:.65rem;color:#a09a92;background:none;border:none;cursor:pointer;flex-shrink:0;padding:.1rem .2rem"
+        onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a09a92'">✕</button>
     </div>`;
   }).join('');
 }
@@ -5239,6 +5306,11 @@ async function fetchAndMergeIcal(feed){
   events.forEach(e=>{
     const k=e.date+'|'+e.subject;
     if(!existing.has(k)){
+      // Attach feed identity so we can group, color, and filter by feed
+      e._fromIcal=true;
+      e._feedName=feed.name||'Calendar Feed';
+      e._feedColor=feed.color||'#7a9eb5';
+      e.colorHex=feed.color||e.colorHex||'#7a9eb5';
       S.events.push(e);
       existing.add(k);
       added++;
@@ -6755,7 +6827,13 @@ let _evtGroupColors={};
 try{_evtGroupColors=JSON.parse(localStorage.getItem(EVT_COLOR_KEY)||'{}');}catch{}
 
 function getEvtGroupColor(groupName){
+  if(!groupName)return '#8a8a8a';
+  // Custom user-set color takes priority
   if(_evtGroupColors[groupName])return _evtGroupColors[groupName];
+  // Check if this matches an iCal feed name
+  const feed=IC.feeds.find(f=>f.name===groupName);
+  if(feed&&feed.color)return feed.color;
+  // Fall back to team color
   return resolveColor('',groupName);
 }
 
