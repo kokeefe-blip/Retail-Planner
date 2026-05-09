@@ -529,6 +529,24 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
     print-color-adjust:exact
   }
 }
+/* ── Catalog Studio ── */
+.cat-tab{padding:.3rem .65rem;border-radius:6px;font-size:.68rem;font-weight:600;border:none;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s;background:transparent;color:#a09a92}
+.cat-tab.active{background:#1a1814;color:#fff}
+.cat-tab:not(.active):hover{background:#f0ede8;color:#1a1814}
+.cat-team-pill{padding:.25rem .65rem;border-radius:999px;font-size:.65rem;font-weight:700;border:2px solid transparent;cursor:pointer;white-space:nowrap;transition:all .15s}
+.cat-card{background:#fff;border-radius:10px;border:1px solid #e8e4dc;overflow:hidden;cursor:pointer;transition:box-shadow .15s,transform .1s;display:flex;flex-direction:column}
+.cat-card:hover{box-shadow:0 4px 18px rgba(0,0,0,.1);transform:translateY(-1px)}
+.cat-card-img{background:#fff;padding:10px;display:flex;align-items:center;justify-content:center;height:160px;position:relative;flex-shrink:0}
+.cat-card-img img{max-width:100%;max-height:100%;object-fit:contain}
+.cat-card-body{padding:.5rem .65rem .65rem;border-top:1px solid #f0ede8;flex:1}
+.cat-ordered-badge{position:absolute;top:6px;right:6px;background:#1a5c2a;color:#fff;font-size:.52rem;font-weight:700;padding:.15rem .35rem;border-radius:4px;letter-spacing:.06em}
+#cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:.75rem}
+.cat-order-row td{padding:.4rem .6rem;font-size:.72rem;border-bottom:.5px solid #e8e4dc;vertical-align:middle}
+.cat-vendor-header{background:#1a1814;color:#fff;padding:.4rem .75rem;font-size:.62rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase}
+.cat-review-card{background:#fff;border:2px solid #e0ddd6;border-radius:8px;cursor:pointer;overflow:hidden;transition:border-color .15s}
+.cat-review-card.selected{border-color:#1a1814}
+.cat-field-label{font-size:.55rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#a09a92;margin-bottom:.15rem}
+.cat-field-val{font-size:.8rem;color:#1a1814;font-weight:500;line-height:1.35}
 </style>
 </head>
 <body>
@@ -598,6 +616,13 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
   <button onclick="showData()" class="flex items-center gap-1 text-xs font-semibold tracking-wide text-stone-500 hover:text-stone-900 transition no-print flex-shrink-0">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
     <span class="hidden sm:inline">Data</span>
+  </button>
+
+  <div class="nav-sep"></div>
+
+  <button onclick="showCatalog()" class="flex items-center gap-1 text-xs font-semibold tracking-wide text-stone-500 hover:text-stone-900 transition no-print flex-shrink-0">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    <span class="hidden sm:inline">Catalog</span>
   </button>
 
   <div class="nav-sep"></div>
@@ -1409,6 +1434,150 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
     </div><!-- /data-tab-historicals -->
 
   </section>
+
+  <!-- ══ CATALOG VIEW ══ -->
+  <section id="catalog-view" style="display:none;min-height:100vh">
+
+    <!-- Sticky category tabs + team filter -->
+    <div id="cat-tabs-bar" style="position:sticky;top:52px;z-index:9;background:#fff;border-bottom:1px solid #e0ddd6;padding:0 1rem">
+      <div style="display:flex;align-items:center;gap:.25rem;overflow-x:auto;padding:.5rem 0;-webkit-overflow-scrolling:touch">
+        <div style="display:flex;gap:.4rem;flex-shrink:0" id="cat-tabs"></div>
+        <div style="flex:1;min-width:.5rem"></div>
+        <!-- Team filter pills -->
+        <div style="display:flex;gap:.3rem;flex-shrink:0" id="cat-team-pills"></div>
+        <!-- Actions -->
+        <div style="display:flex;gap:.5rem;margin-left:.5rem;flex-shrink:0" class="no-print">
+          <button onclick="openCatForm(null)" style="display:flex;align-items:center;gap:.3rem;padding:.3rem .7rem;border-radius:6px;background:#1a1814;color:#fff;font-size:.7rem;font-weight:600;border:none;cursor:pointer">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Product
+          </button>
+          <label style="display:flex;align-items:center;gap:.3rem;padding:.3rem .7rem;border-radius:6px;background:#f5f2ed;color:#6a6460;font-size:.7rem;font-weight:600;border:1px solid #e0ddd6;cursor:pointer">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload
+            <input type="file" accept=".pdf,image/*" class="hidden" onchange="uploadCatalogFile(event)"/>
+          </label>
+          <button onclick="exportCatalogHTML()" style="padding:.3rem .7rem;border-radius:6px;background:#f5f2ed;color:#6a6460;font-size:.7rem;font-weight:600;border:1px solid #e0ddd6;cursor:pointer">Export</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main content area -->
+    <div id="cat-content" style="padding:1.25rem 1rem"></div>
+
+  </section>
+
+  <!-- CATALOG PRODUCT DETAIL MODAL -->
+  <div id="cat-detail-modal" style="display:none;position:fixed;inset:0;z-index:400;background:rgba(26,24,20,.55);backdrop-filter:blur(4px);align-items:flex-start;justify-content:center;padding:1rem;overflow-y:auto">
+    <div style="background:#faf9f6;border-radius:1.25rem;width:100%;max-width:780px;margin:auto;overflow:hidden;position:relative">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid #e0ddd6">
+        <h3 id="cat-detail-name" style="font-family:Georgia,serif;font-weight:700;font-size:1rem;color:#1a1814"></h3>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <button onclick="addToOrder(CAT.detailProduct)" id="cat-order-btn" style="padding:.3rem .75rem;border-radius:6px;font-size:.7rem;font-weight:600;border:none;cursor:pointer;background:#1a5c2a;color:#fff">+ Order</button>
+          <button onclick="openCatForm(CAT.detailProduct)" style="padding:.3rem .75rem;border-radius:6px;font-size:.7rem;font-weight:600;border:1px solid #e0ddd6;background:#fff;cursor:pointer">Edit</button>
+          <button onclick="closeCatDetail()" style="font-size:1.2rem;line-height:1;color:#a09a92;background:none;border:none;cursor:pointer;padding:.2rem .4rem">✕</button>
+        </div>
+      </div>
+      <div id="cat-detail-body" style="display:flex;gap:0;min-height:360px">
+        <div id="cat-detail-img" style="width:48%;background:#fff;display:flex;align-items:center;justify-content:center;padding:1.5rem;flex-shrink:0">
+          <img id="cat-detail-img-el" style="max-width:100%;max-height:320px;object-fit:contain" src="" alt=""/>
+        </div>
+        <div id="cat-detail-info" style="flex:1;padding:1.25rem;overflow-y:auto;max-height:80vh"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CATALOG PRODUCT FORM MODAL -->
+  <div id="cat-form-modal" style="display:none;position:fixed;inset:0;z-index:401;background:rgba(26,24,20,.55);backdrop-filter:blur(4px);align-items:flex-start;justify-content:center;padding:1rem;overflow-y:auto">
+    <div style="background:#faf9f6;border-radius:1.25rem;width:100%;max-width:560px;margin:auto;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid #e0ddd6">
+        <h3 id="cat-form-title" style="font-family:Georgia,serif;font-weight:700;font-size:1rem;color:#1a1814">Add Product</h3>
+        <button onclick="closeCatForm()" style="font-size:1.2rem;color:#a09a92;background:none;border:none;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:1.25rem;display:flex;flex-direction:column;gap:.85rem;max-height:80vh;overflow-y:auto">
+        <!-- Image upload -->
+        <div>
+          <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.3rem">Product Image</label>
+          <div style="display:flex;align-items:center;gap:.75rem">
+            <div id="cat-form-img-preview" style="width:72px;height:72px;background:#f0ede8;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c4bfb7" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </div>
+            <label style="padding:.4rem .75rem;border-radius:6px;border:1px solid #e0ddd6;background:#fff;font-size:.7rem;color:#6a6460;cursor:pointer;font-weight:600">
+              Choose Image
+              <input type="file" accept="image/*" class="hidden" onchange="handleCatImageUpload(event)"/>
+            </label>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+          <div style="grid-column:1/-1">
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">Product Name</label>
+            <input id="cf-name" type="text" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none"/>
+          </div>
+          <div>
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">Category</label>
+            <select id="cf-category" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none;background:#fff">
+              <option value="tee">T-Shirts</option><option value="longsleeve">Long Sleeve</option>
+              <option value="hoodie">Hoodies</option><option value="crew">Crew Necks</option>
+              <option value="hat">Hats</option><option value="jacket">Jackets</option>
+              <option value="polo">Polos</option><option value="tank">Tanks</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">Vendor</label>
+            <select id="cf-vendor" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none;background:#fff">
+              <option value="WEAR by Erin Andrews">WEAR by Erin Andrews (Thorns)</option>
+              <option value="FanInk">FanInk (Timbers)</option>
+              <option value="Hyder Graphics">Hyder Graphics (Timbers)</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">Vendor #</label>
+            <input id="cf-vendornum" type="text" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none"/>
+          </div>
+          <div>
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">Style</label>
+            <input id="cf-style" type="text" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none"/>
+          </div>
+          <div>
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">Cost</label>
+            <input id="cf-cost" type="number" step="0.01" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none"/>
+          </div>
+          <div>
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">Retail Price</label>
+            <input id="cf-price" type="number" step="0.01" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none"/>
+          </div>
+          <div>
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">MOQ</label>
+            <input id="cf-moq" type="number" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none"/>
+          </div>
+          <div>
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">Order Dates</label>
+            <input id="cf-orderdates" type="text" placeholder="2 weeks from order" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none"/>
+          </div>
+          <div style="grid-column:1/-1">
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">Colors</label>
+            <input id="cf-colors" type="text" placeholder="Black, White, Navy" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none"/>
+          </div>
+          <div style="grid-column:1/-1">
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">Sizes</label>
+            <input id="cf-sizes" type="text" placeholder="XS, S, M, L, XL, XXL" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none"/>
+          </div>
+          <div style="grid-column:1/-1">
+            <label style="font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;display:block;margin-bottom:.25rem">Description / Notes</label>
+            <textarea id="cf-desc" rows="3" style="width:100%;border:1px solid #e0ddd6;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-family:inherit;outline:none;resize:vertical"></textarea>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-top:1px solid #e0ddd6">
+        <button id="cat-form-delete-btn" onclick="deleteCatProduct()" style="font-size:.7rem;color:#ef4444;background:none;border:none;cursor:pointer;font-weight:600;display:none">Delete Product</button>
+        <div style="display:flex;gap:.5rem;margin-left:auto">
+          <button onclick="closeCatForm()" style="padding:.4rem .85rem;border-radius:8px;border:1px solid #e0ddd6;font-size:.75rem;color:#6a6460;font-weight:600;cursor:pointer;background:#fff">Cancel</button>
+          <button onclick="saveCatProduct()" style="padding:.4rem .85rem;border-radius:8px;background:#1a1814;color:#fff;font-size:.75rem;font-weight:600;border:none;cursor:pointer">Save Product</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
 </main>
 
@@ -5851,6 +6020,735 @@ function downloadHistoricalsTemplate(){
   const blob=new Blob([csv],{type:'text/csv'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download='historicals-template.csv';a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ══════════════════════════════════════════
+   CATALOG STUDIO
+   Product catalog management for Portland
+   Timbers / Thorns merchandise buying
+══════════════════════════════════════════ */
+
+const CAT_CATEGORIES=[
+  {id:'all',label:'All'},
+  {id:'tee',label:'T-Shirts'},
+  {id:'longsleeve',label:'Long Sleeve'},
+  {id:'hoodie',label:'Hoodies'},
+  {id:'crew',label:'Crew Necks'},
+  {id:'hat',label:'Hats'},
+  {id:'jacket',label:'Jackets'},
+  {id:'polo',label:'Polos'},
+  {id:'tank',label:'Tanks'},
+  {id:'other',label:'Other'},
+  {id:'orders',label:'Orders'},
+];
+
+const CAT={
+  products:[],
+  orders:[],
+  tab:'all',
+  teamFilter:'all',
+  screen:'catalog', // catalog | review
+  detailProduct:null,
+  editId:null,
+  reviewProducts:[],
+  reviewSelected:[],
+  _formImg:null,
+};
+
+// Team → color mapping
+function catTeamColor(vendorName){
+  if(!vendorName)return '#8a8a8a';
+  if(vendorName==='WEAR by Erin Andrews')return '#8B1A1A';
+  if(vendorName==='FanInk'||vendorName==='Hyder Graphics')return '#1A5C2A';
+  return '#6a6460';
+}
+function catTeamMatch(p){
+  if(CAT.teamFilter==='all')return true;
+  if(CAT.teamFilter==='thorns')return p.vendorName==='WEAR by Erin Andrews';
+  if(CAT.teamFilter==='timbers')return p.vendorName==='FanInk'||p.vendorName==='Hyder Graphics';
+  return true;
+}
+
+function catVisible(){
+  return CAT.products
+    .filter(p=>CAT.tab==='all'||p.category===CAT.tab)
+    .filter(p=>catTeamMatch(p));
+}
+
+function catCountFor(id){
+  if(id==='orders')return CAT.orders.length;
+  return CAT.products
+    .filter(p=>id==='all'||p.category===id)
+    .filter(p=>catTeamMatch(p)).length;
+}
+
+/* ── Storage ── */
+function catSaveProducts(){
+  if(!S.db||!S.userId)return;
+  const data={products:CAT.products,updatedAt:Date.now()};
+  S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/catalog/products`)
+    .set(data,{merge:false})
+    .then(()=>setStatus('Catalog saved','ok'))
+    .catch(e=>console.error('catalog save:',e));
+}
+
+function catSaveOrders(){
+  if(!S.db||!S.userId)return;
+  S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/catalog/orders`)
+    .set({orders:CAT.orders},{merge:false})
+    .catch(e=>console.error('orders save:',e));
+}
+
+function catLoad(){
+  if(!S.db||!S.userId)return;
+  S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/catalog/products`).get()
+    .then(snap=>{if(snap.exists){CAT.products=snap.data().products||[];renderCatalog();}})
+    .catch(e=>console.warn('catalog load:',e));
+  S.db.doc(`/artifacts/${APP_ID}/users/${S.userId}/catalog/orders`).get()
+    .then(snap=>{if(snap.exists){CAT.orders=snap.data().orders||[];}})
+    .catch(e=>console.warn('orders load:',e));
+}
+
+/* ── Navigation ── */
+function showCatalog(){
+  if(S.view==='daily'){clearTimeout(S.saveTimer);doSave();}
+  if(S.listener){S.listener();S.listener=null;}
+  S.view='catalog';
+  document.body.dataset.view='catalog';
+  ['home-view','daily-view','month-view','planning-view','projects-view','data-view']
+    .forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('catalog-view').style.display='';
+  catLoad();
+  renderCatalogTabs();
+  renderCatalogTeamPills();
+  renderCatalog();
+}
+
+/* ── Tabs & Pills ── */
+function renderCatalogTabs(){
+  const el=document.getElementById('cat-tabs');
+  if(!el)return;
+  el.innerHTML=CAT_CATEGORIES.map(c=>{
+    const count=catCountFor(c.id);
+    const active=CAT.tab===c.id;
+    return `<button class="cat-tab${active?' active':''}" onclick="setCatTab('${c.id}')">
+      ${c.label}${count?` <span style="opacity:.6">${count}</span>`:''}
+    </button>`;
+  }).join('');
+}
+
+function setCatTab(id){
+  CAT.tab=id;
+  renderCatalogTabs();
+  renderCatalog();
+}
+
+function renderCatalogTeamPills(){
+  const el=document.getElementById('cat-team-pills');
+  if(!el)return;
+  const pills=[
+    {id:'all',  label:'All',     bg:'#e8e4dc',color:'#1a1814',bdr:'#1a1814'},
+    {id:'thorns',label:'Thorns', bg:'#8B1A1A',color:'#fff',  bdr:'#8B1A1A'},
+    {id:'timbers',label:'Timbers',bg:'#1A5C2A',color:'#fff', bdr:'#1A5C2A'},
+  ];
+  el.innerHTML=pills.map(p=>{
+    const active=CAT.teamFilter===p.id;
+    return `<button class="cat-team-pill" onclick="setCatTeam('${p.id}')"
+      style="background:${active?p.bg:'transparent'};color:${active?p.color:'#a09a92'};border-color:${active?p.bdr:'#e0ddd6'}">
+      ${p.label}
+    </button>`;
+  }).join('');
+}
+
+function setCatTeam(id){
+  CAT.teamFilter=id;
+  renderCatalogTeamPills();
+  renderCatalogTabs();
+  renderCatalog();
+}
+
+/* ── Main render ── */
+function renderCatalog(){
+  const el=document.getElementById('cat-content');
+  if(!el)return;
+  if(CAT.tab==='orders'){renderOrdersPage();return;}
+  if(CAT.screen==='review'){renderReviewScreen();return;}
+
+  const products=catVisible();
+  if(!products.length){
+    el.innerHTML=`<div style="text-align:center;padding:4rem 1rem">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c4bfb7" stroke-width="1.5" style="margin:0 auto 1rem"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <p style="color:#a09a92;font-size:.85rem;font-weight:500">No products${CAT.tab!=='all'?' in this category':''}</p>
+      <p style="color:#c4bfb7;font-size:.75rem;margin-top:.3rem">Add a product or upload a vendor catalog</p>
+    </div>`;
+    return;
+  }
+  el.innerHTML='';
+  const grid=document.createElement('div');
+  grid.id='cat-grid';
+  products.forEach(p=>grid.appendChild(buildCatCard(p)));
+  el.appendChild(grid);
+}
+
+function buildCatCard(p){
+  const div=document.createElement('div');
+  div.className='cat-card';
+  const inOrder=CAT.orders.some(o=>o.id===p.id);
+  const tc=catTeamColor(p.vendorName);
+  div.innerHTML=`
+    <div class="cat-card-img">
+      ${p.image?`<img src="${p.image}" alt="${esc(p.name)}"/>`:`<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#e0ddd6" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`}
+      ${inOrder?`<span class="cat-ordered-badge">✓ Ordered</span>`:''}
+    </div>
+    <div class="cat-card-body">
+      <div style="font-size:.7rem;font-weight:700;color:#1a1814;line-height:1.3;margin-bottom:.2rem">${esc(p.name)}</div>
+      <div style="font-size:.6rem;color:${tc};font-weight:600;margin-bottom:.15rem">${esc(p.vendorName||'')}</div>
+      ${p.style?`<div style="font-size:.6rem;color:#a09a92">${esc(p.style)}</div>`:''}
+      <div style="display:flex;align-items:baseline;gap:.4rem;margin-top:.3rem">
+        ${p.cost!=null?`<span style="font-size:.72rem;font-weight:700;color:#1a1814">$${p.cost}</span>`:''}
+        ${p.price!=null?`<span style="font-size:.6rem;color:#a09a92">ret $${p.price}</span>`:''}
+      </div>
+    </div>`;
+  div.addEventListener('click',()=>openCatDetail(p));
+  return div;
+}
+
+/* ── Detail Modal ── */
+function openCatDetail(p){
+  CAT.detailProduct=p;
+  document.getElementById('cat-detail-name').textContent=p.name;
+  const imgEl=document.getElementById('cat-detail-img-el');
+  const imgWrap=document.getElementById('cat-detail-img');
+  if(p.image){imgEl.src=p.image;imgWrap.style.display='';}
+  else imgWrap.style.display='none';
+
+  const inOrder=CAT.orders.some(o=>o.id===p.id);
+  const btn=document.getElementById('cat-order-btn');
+  btn.textContent=inOrder?'✓ In Order':'+ Order';
+  btn.style.background=inOrder?'#a09a92':'#1a5c2a';
+
+  const tc=catTeamColor(p.vendorName);
+  document.getElementById('cat-detail-info').innerHTML=`
+    <div style="margin-bottom:.75rem">
+      <div class="cat-field-label">Vendor</div>
+      <div class="cat-field-val" style="color:${tc}">${esc(p.vendorName||'—')}</div>
+    </div>
+    ${p.vendorNumber?`<div style="margin-bottom:.75rem"><div class="cat-field-label">Vendor #</div><div class="cat-field-val">${esc(p.vendorNumber)}</div></div>`:''}
+    ${p.style?`<div style="margin-bottom:.75rem"><div class="cat-field-label">Style</div><div class="cat-field-val">${esc(p.style)}</div></div>`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.75rem">
+      ${p.cost!=null?`<div><div class="cat-field-label">Cost</div><div class="cat-field-val">$${p.cost}</div></div>`:''}
+      ${p.price!=null?`<div><div class="cat-field-label">Retail</div><div class="cat-field-val">$${p.price}</div></div>`:''}
+      ${p.moq!=null?`<div><div class="cat-field-label">MOQ</div><div class="cat-field-val">${p.moq}</div></div>`:''}
+      ${p.orderDates?`<div><div class="cat-field-label">Order By</div><div class="cat-field-val">${esc(p.orderDates)}</div></div>`:''}
+    </div>
+    ${p.colors?`<div style="margin-bottom:.75rem"><div class="cat-field-label">Colors</div><div class="cat-field-val">${esc(p.colors)}</div></div>`:''}
+    ${p.sizes?`<div style="margin-bottom:.75rem"><div class="cat-field-label">Sizes</div><div class="cat-field-val">${esc(p.sizes)}</div></div>`:''}
+    ${p.description?`<div style="margin-bottom:.75rem"><div class="cat-field-label">Description</div><div class="cat-field-val" style="font-weight:400;color:#6a6460">${esc(p.description)}</div></div>`:''}
+  `;
+  document.getElementById('cat-detail-modal').style.display='flex';
+}
+
+function closeCatDetail(){
+  document.getElementById('cat-detail-modal').style.display='none';
+  CAT.detailProduct=null;
+}
+
+/* ── Add/Edit Form ── */
+function openCatForm(p){
+  CAT.editId=p?p.id:null;
+  CAT._formImg=p?p.image:null;
+  document.getElementById('cat-form-title').textContent=p?'Edit Product':'Add Product';
+  document.getElementById('cat-form-delete-btn').style.display=p?'':'none';
+  document.getElementById('cf-name').value=p?p.name:'';
+  document.getElementById('cf-category').value=p?p.category:'tee';
+  document.getElementById('cf-vendor').value=p?p.vendorName:'WEAR by Erin Andrews';
+  document.getElementById('cf-vendornum').value=p?p.vendorNumber||'':'';
+  document.getElementById('cf-style').value=p?p.style||'':'';
+  document.getElementById('cf-cost').value=p&&p.cost!=null?p.cost:'';
+  document.getElementById('cf-price').value=p&&p.price!=null?p.price:'';
+  document.getElementById('cf-moq').value=p&&p.moq!=null?p.moq:'';
+  document.getElementById('cf-orderdates').value=p?p.orderDates||'':'';
+  document.getElementById('cf-colors').value=p?p.colors||'':'';
+  document.getElementById('cf-sizes').value=p?p.sizes||'':'';
+  document.getElementById('cf-desc').value=p?p.description||'':'';
+  // Image preview
+  const preview=document.getElementById('cat-form-img-preview');
+  if(p&&p.image){
+    preview.innerHTML=`<img src="${p.image}" style="width:72px;height:72px;object-fit:contain;border-radius:6px"/>`;
+  } else {
+    preview.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c4bfb7" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
+  }
+  closeCatDetail();
+  document.getElementById('cat-form-modal').style.display='flex';
+}
+
+function closeCatForm(){
+  document.getElementById('cat-form-modal').style.display='none';
+  CAT.editId=null;CAT._formImg=null;
+}
+
+function handleCatImageUpload(e){
+  const f=e.target.files[0];if(!f)return;
+  const canvas=document.createElement('canvas');
+  const img=new Image();
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    img.onload=()=>{
+      const max=500;
+      let w=img.width,h=img.height;
+      if(w>max||h>max){const r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r);}
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      CAT._formImg=canvas.toDataURL('image/jpeg',0.75);
+      document.getElementById('cat-form-img-preview').innerHTML=
+        `<img src="${CAT._formImg}" style="width:72px;height:72px;object-fit:contain;border-radius:6px"/>`;
+    };
+    img.src=ev.target.result;
+  };
+  reader.readAsDataURL(f);
+  e.target.value='';
+}
+
+function saveCatProduct(){
+  const name=document.getElementById('cf-name').value.trim();
+  if(!name){document.getElementById('cf-name').focus();return;}
+  const cost=document.getElementById('cf-cost').value;
+  const price=document.getElementById('cf-price').value;
+  const moq=document.getElementById('cf-moq').value;
+  const p={
+    id:CAT.editId||('p-'+uid()),
+    name,
+    category:document.getElementById('cf-category').value,
+    vendorName:document.getElementById('cf-vendor').value,
+    vendorNumber:document.getElementById('cf-vendornum').value.trim(),
+    style:document.getElementById('cf-style').value.trim(),
+    cost:cost!==''?+cost:null,
+    price:price!==''?+price:null,
+    moq:moq!==''?+moq:null,
+    orderDates:document.getElementById('cf-orderdates').value.trim(),
+    colors:document.getElementById('cf-colors').value.trim(),
+    sizes:document.getElementById('cf-sizes').value.trim(),
+    description:document.getElementById('cf-desc').value.trim(),
+    image:CAT._formImg||null,
+    updatedAt:new Date().toLocaleDateString(),
+  };
+  if(CAT.editId){
+    const idx=CAT.products.findIndex(x=>x.id===CAT.editId);
+    if(idx>=0)CAT.products[idx]=p;
+    else CAT.products.push(p);
+  } else {
+    CAT.products.push(p);
+  }
+  catSaveProducts();
+  closeCatForm();
+  renderCatalogTabs();
+  renderCatalog();
+}
+
+function deleteCatProduct(){
+  if(!CAT.editId)return;
+  if(!confirm('Delete this product?\n\nThis cannot be undone.'))return;
+  CAT.products=CAT.products.filter(p=>p.id!==CAT.editId);
+  CAT.orders=CAT.orders.filter(o=>o.id!==CAT.editId);
+  catSaveProducts();catSaveOrders();
+  closeCatForm();
+  renderCatalogTabs();
+  renderCatalog();
+}
+
+/* ── Orders ── */
+function addToOrder(p){
+  if(!p)return;
+  if(CAT.orders.some(o=>o.id===p.id)){
+    CAT.orders=CAT.orders.filter(o=>o.id!==p.id);
+  } else {
+    CAT.orders.push({
+      id:p.id,name:p.name,vendorName:p.vendorName,vendorNumber:p.vendorNumber||'',
+      style:p.style||'',category:p.category,cost:p.cost,
+      retail:p.cost?+(p.cost*1.56).toFixed(2):null,
+      qty:p.moq||1,moq:p.moq,colors:p.colors||'',sizes:p.sizes||'',
+      orderDates:p.orderDates||'',image:p.image||null,
+    });
+  }
+  catSaveOrders();
+  closeCatDetail();
+  renderCatalog();
+}
+
+function renderOrdersPage(){
+  const el=document.getElementById('cat-content');
+  if(!el)return;
+  if(!CAT.orders.length){
+    el.innerHTML=`<div style="text-align:center;padding:4rem 1rem">
+      <p style="color:#a09a92;font-size:.85rem;font-weight:500">No items in order yet</p>
+      <p style="color:#c4bfb7;font-size:.75rem;margin-top:.3rem">Browse the catalog and click "+ Order" on products</p>
+    </div>`;return;
+  }
+  // Group by vendor
+  const byVendor={};
+  CAT.orders.forEach(o=>{
+    if(!byVendor[o.vendorName])byVendor[o.vendorName]=[];
+    byVendor[o.vendorName].push(o);
+  });
+  let html=`<div style="margin-bottom:.75rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+    <div style="font-size:.8rem;color:#6a6460">${CAT.orders.length} items · ${Object.keys(byVendor).length} vendors</div>
+    <div style="display:flex;gap:.5rem">
+      <button onclick="downloadOrder()" style="padding:.35rem .85rem;border-radius:8px;background:#1a1814;color:#fff;font-size:.75rem;font-weight:600;border:none;cursor:pointer">↓ Download PO</button>
+      <button onclick="if(confirm('Clear entire order?')){{CAT.orders=[];catSaveOrders();renderCatalog();}}" style="padding:.35rem .85rem;border-radius:8px;border:1px solid #e0ddd6;font-size:.75rem;font-weight:600;cursor:pointer;color:#a09a92">Clear Order</button>
+    </div>
+  </div>`;
+  let grandTotal=0;
+  Object.entries(byVendor).forEach(([vendor,items])=>{
+    const vTotal=items.reduce((s,i)=>s+(+(i.cost||0)*(+i.qty||0)),0);
+    grandTotal+=vTotal;
+    html+=`<div style="border-radius:10px;overflow:hidden;border:1px solid #e0ddd6;margin-bottom:1rem">
+      <div class="cat-vendor-header" style="display:flex;justify-content:space-between">
+        <span>${esc(vendor)}</span>
+        <span>$${vTotal.toFixed(2)}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:#f5f2ed">
+          <th style="padding:.35rem .6rem;font-size:.52rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92;text-align:left">Product</th>
+          <th style="padding:.35rem .6rem;font-size:.52rem;text-align:right;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92">Cost</th>
+          <th style="padding:.35rem .6rem;font-size:.52rem;text-align:center;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92">Qty</th>
+          <th style="padding:.35rem .6rem;font-size:.52rem;text-align:right;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92">Retail</th>
+          <th style="padding:.35rem .6rem;font-size:.52rem;text-align:right;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#a09a92">Total</th>
+          <th style="padding:.35rem .6rem;width:1rem"></th>
+        </tr></thead>
+        <tbody>`;
+    items.forEach(o=>{
+      const lineTotal=((o.cost||0)*(o.qty||0)).toFixed(2);
+      html+=`<tr class="cat-order-row">
+        <td style="padding:.4rem .6rem;font-size:.72rem">
+          <div style="font-weight:600">${esc(o.name)}</div>
+          ${o.vendorNumber?`<div style="font-size:.6rem;color:#a09a92">${esc(o.vendorNumber)}</div>`:''}
+          ${o.colors?`<div style="font-size:.6rem;color:#a09a92">${esc(o.colors)}</div>`:''}
+        </td>
+        <td style="padding:.4rem .6rem;text-align:right;font-size:.72rem">${o.cost!=null?'$'+o.cost:'—'}</td>
+        <td style="padding:.4rem .6rem;text-align:center">
+          <input type="number" min="1" value="${o.qty||1}" onchange="updateOrderItem('${o.id}','qty',+this.value)"
+            style="width:3.5rem;border:1px solid #e0ddd6;border-radius:6px;padding:.2rem .3rem;text-align:center;font-size:.72rem;font-family:inherit"/>
+        </td>
+        <td style="padding:.4rem .6rem;text-align:right">
+          <input type="number" min="0" step="0.01" value="${o.retail!=null?o.retail:''}" placeholder="—" onchange="updateOrderItem('${o.id}','retail',+this.value)"
+            style="width:4rem;border:1px solid #e0ddd6;border-radius:6px;padding:.2rem .3rem;text-align:right;font-size:.72rem;font-family:inherit"/>
+        </td>
+        <td style="padding:.4rem .6rem;text-align:right;font-size:.72rem;font-weight:600">$${lineTotal}</td>
+        <td style="padding:.4rem .6rem">
+          <button onclick="removeFromOrder('${o.id}')" style="color:#a09a92;background:none;border:none;cursor:pointer;font-size:.7rem"
+            onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a09a92'">✕</button>
+        </td>
+      </tr>`;
+    });
+    html+=`</tbody></table></div>`;
+  });
+  html+=`<div style="text-align:right;padding:.75rem 1rem;font-size:.9rem;font-weight:700;border-top:2px solid #1a1814;color:#1a1814">Grand Total: $${grandTotal.toFixed(2)}</div>`;
+  el.innerHTML=html;
+}
+
+function updateOrderItem(id,key,val){
+  const o=CAT.orders.find(x=>x.id===id);
+  if(o){o[key]=val;catSaveOrders();renderOrdersPage();}
+}
+
+function removeFromOrder(id){
+  CAT.orders=CAT.orders.filter(o=>o.id!==id);
+  catSaveOrders();renderCatalogTabs();renderOrdersPage();
+}
+
+function downloadOrder(){
+  const date=new Date().toLocaleDateString();
+  const byVendor={};
+  CAT.orders.forEach(o=>{if(!byVendor[o.vendorName])byVendor[o.vendorName]=[];byVendor[o.vendorName].push(o);});
+  let html=`<!DOCTYPE html><html><head><title>Purchase Order ${date}</title>
+  <style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:2rem}
+  h1{font-size:16px}table{width:100%;border-collapse:collapse;margin-bottom:1.5rem}
+  th{background:#1a1814;color:#fff;padding:6px 8px;text-align:left;font-size:10px;letter-spacing:.1em}
+  td{padding:5px 8px;border-bottom:1px solid #ddd;vertical-align:top}
+  .vendor-head{background:#1a1814;color:#fff;padding:6px 10px;font-weight:bold;letter-spacing:.1em;margin-top:1.5rem}
+  .total{text-align:right;padding:6px;font-weight:bold;font-size:13px;border-top:2px solid #1a1814}
+  img{width:60px;height:60px;object-fit:contain;background:#fff}
+  @media print{@page{margin:1.5cm}}</style></head><body>
+  <h1>Purchase Order</h1><p style="color:#666">Generated ${date} · ${CAT.orders.length} items · ${Object.keys(byVendor).length} vendors</p>`;
+  let grand=0;
+  Object.entries(byVendor).forEach(([vendor,items])=>{
+    const vTotal=items.reduce((s,i)=>s+(+(i.cost||0)*(+i.qty||0)),0);
+    grand+=vTotal;
+    html+=`<div class="vendor-head">${vendor} — $${vTotal.toFixed(2)}</div>
+    <table><thead><tr><th>Img</th><th>Product</th><th>Style #</th><th>Colors</th><th>Sizes</th><th>Order By</th><th>Cost</th><th>Qty</th><th>Total</th><th>Retail</th></tr></thead><tbody>`;
+    items.forEach(o=>{
+      const lineTotal=((o.cost||0)*(o.qty||0)).toFixed(2);
+      html+=`<tr>
+        <td>${o.image?`<img src="${o.image}"/>`:'—'}</td>
+        <td><strong>${esc(o.name)}</strong></td>
+        <td>${esc(o.vendorNumber||'—')}</td>
+        <td>${esc(o.colors||'—')}</td>
+        <td>${esc(o.sizes||'—')}</td>
+        <td>${esc(o.orderDates||'—')}</td>
+        <td>${o.cost!=null?'$'+o.cost:'—'}</td>
+        <td>${o.qty||1}</td>
+        <td>$${lineTotal}</td>
+        <td>${o.retail!=null?'$'+o.retail:'—'}</td>
+      </tr>`;
+    });
+    html+=`</tbody></table>`;
+  });
+  html+=`<div class="total">Grand Total: $${grand.toFixed(2)}</div></body></html>`;
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`order-${new Date().toISOString().slice(0,10)}.html`;a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ── AI Upload ── */
+function uploadCatalogFile(e){
+  const f=e.target.files[0];if(!f)return;
+  e.target.value='';
+  if(f.type==='application/pdf'){
+    uploadPDFCatalog(f);
+  } else {
+    uploadImageCatalog(f);
+  }
+}
+
+function uploadImageCatalog(file){
+  const reader=new FileReader();
+  reader.onload=async ev=>{
+    setStatus('Extracting products…','work');
+    const base64=ev.target.result.split(',')[1];
+    try{
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',
+          max_tokens:2000,
+          messages:[{role:'user',content:[
+            {type:'image',source:{type:'base64',media_type:file.type,data:base64}},
+            {type:'text',text:CAT_EXTRACT_PROMPT}
+          ]}]
+        })
+      });
+      const data=await resp.json();
+      const text=data.content.map(b=>b.text||'').join('');
+      const products=JSON.parse(text.replace(/```json|```/g,'').trim());
+      if(!Array.isArray(products)||!products.length){setStatus('No products found','err');return;}
+      CAT.reviewProducts=products.map(p=>({...p,id:'p-'+uid(),image:ev.target.result,updatedAt:new Date().toLocaleDateString()}));
+      CAT.reviewSelected=[...CAT.reviewProducts.map(p=>p.id)];
+      CAT.screen='review';
+      setStatus('','ok');
+      renderCatalog();
+    }catch(err){
+      console.error(err);
+      setStatus('Extraction failed','err');
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function uploadPDFCatalog(file){
+  setStatus('Loading PDF…','work');
+  // Load PDF.js
+  if(!window.pdfjsLib){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      s.onload=res;s.onerror=rej;document.head.appendChild(s);
+    });
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  const arrayBuffer=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:arrayBuffer}).promise;
+  const allExtracted=[];
+  for(let i=1;i<=pdf.numPages;i++){
+    setStatus(`Processing page ${i}/${pdf.numPages}…`,'work');
+    const page=await pdf.getPage(i);
+    const scale=1.4;
+    const viewport=page.getViewport({scale});
+    const canvas=document.createElement('canvas');
+    canvas.width=viewport.width;canvas.height=viewport.height;
+    const ctx=canvas.getContext('2d');
+    await page.render({canvasContext:ctx,viewport}).promise;
+    const fullBase64=canvas.toDataURL('image/jpeg',0.85).split(',')[1];
+    // Extract text via Claude
+    try{
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',
+          max_tokens:2000,
+          messages:[{role:'user',content:[
+            {type:'image',source:{type:'base64',media_type:'image/jpeg',data:fullBase64}},
+            {type:'text',text:CAT_EXTRACT_PROMPT}
+          ]}]
+        })
+      });
+      const data=await resp.json();
+      const text=data.content.map(b=>b.text||'').join('');
+      const products=JSON.parse(text.replace(/```json|```/g,'').trim());
+      if(Array.isArray(products)&&products.length){
+        // Crop and compress image, assign to single-product pages
+        const cropped=catCropCanvas(canvas);
+        const jpegUrl=catCanvasToJpeg(cropped);
+        products.forEach(p=>{
+          allExtracted.push({...p,id:'p-'+uid(),
+            image:products.length===1?jpegUrl:null,
+            updatedAt:new Date().toLocaleDateString()});
+        });
+      }
+    }catch{/* skip page */}
+  }
+  if(!allExtracted.length){setStatus('No products found in PDF','err');return;}
+  CAT.reviewProducts=allExtracted;
+  CAT.reviewSelected=[...allExtracted.map(p=>p.id)];
+  CAT.screen='review';
+  setStatus('','ok');
+  renderCatalog();
+}
+
+const CAT_EXTRACT_PROMPT=`Extract ALL products visible on this catalog page.
+Return ONLY a raw JSON array (no markdown, no backticks).
+Each object: {"name":"","category":"tee|longsleeve|hoodie|crew|hat|jacket|polo|tank|other","vendorName":"","vendorNumber":"","style":"","cost":null,"price":null,"moq":null,"orderDates":"","colors":"","sizes":"","description":""}
+If this is a cover/intro page with no products, return [].`;
+
+function catCropCanvas(canvas){
+  // Simple top-crop of black header bar
+  const ctx=canvas.getContext('2d');
+  const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+  let topCrop=0;
+  for(let y=0;y<canvas.height;y+=4){
+    let sum=0;
+    for(let x=0;x<canvas.width;x++){
+      const i=(y*canvas.width+x)*4;
+      sum+=(data[i]+data[i+1]+data[i+2])/3;
+    }
+    const avg=sum/canvas.width;
+    if(avg>200&&y>10){topCrop=y;break;}
+  }
+  const h=canvas.height-topCrop;
+  const out=document.createElement('canvas');
+  out.width=canvas.width;out.height=h;
+  out.getContext('2d').drawImage(canvas,0,topCrop,canvas.width,h,0,0,canvas.width,h);
+  return out;
+}
+
+function catCanvasToJpeg(canvas,maxPx=420,quality=0.77){
+  let w=canvas.width,h=canvas.height;
+  if(w>maxPx||h>maxPx){const r=Math.min(maxPx/w,maxPx/h);w=Math.round(w*r);h=Math.round(h*r);}
+  const out=document.createElement('canvas');out.width=w;out.height=h;
+  out.getContext('2d').drawImage(canvas,0,0,w,h);
+  return out.toDataURL('image/jpeg',quality);
+}
+
+/* ── Review Screen ── */
+function renderReviewScreen(){
+  const el=document.getElementById('cat-content');
+  if(!el)return;
+  const sel=new Set(CAT.reviewSelected);
+  el.innerHTML=`<div style="margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+    <div>
+      <h3 style="font-family:Georgia,serif;font-size:1rem;font-weight:700">Review Extracted Products</h3>
+      <p style="font-size:.75rem;color:#a09a92;margin-top:.2rem">${CAT.reviewProducts.length} products found — select which to add</p>
+    </div>
+    <div style="display:flex;gap:.5rem">
+      <button onclick="selectAllReview()" style="padding:.35rem .7rem;border-radius:6px;border:1px solid #e0ddd6;font-size:.72rem;font-weight:600;cursor:pointer">Select All</button>
+      <button onclick="confirmReview()" style="padding:.35rem .85rem;border-radius:6px;background:#1a1814;color:#fff;font-size:.72rem;font-weight:600;border:none;cursor:pointer">
+        Add ${CAT.reviewSelected.length} to Catalog
+      </button>
+      <button onclick="CAT.screen='catalog';renderCatalog()" style="padding:.35rem .7rem;border-radius:6px;border:1px solid #e0ddd6;font-size:.72rem;font-weight:600;cursor:pointer;color:#a09a92">Cancel</button>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.6rem">
+    ${CAT.reviewProducts.map(p=>`
+      <div class="cat-review-card${sel.has(p.id)?' selected':''}" onclick="toggleReviewSelect('${p.id}')">
+        <div style="position:relative">
+          ${p.image?`<img src="${p.image}" style="width:100%;height:110px;object-fit:contain;background:#fff;padding:6px"/>`:`<div style="height:110px;background:#f5f2ed;display:flex;align-items:center;justify-content:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c4bfb7" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>`}
+          ${sel.has(p.id)?`<div style="position:absolute;top:5px;right:5px;background:#1a1814;color:#fff;border-radius:50%;width:18px;height:18px;font-size:.65rem;display:flex;align-items:center;justify-content:center;font-weight:700">✓</div>`:''}
+        </div>
+        <div style="padding:.4rem .5rem .5rem">
+          <div style="font-size:.68rem;font-weight:700;color:#1a1814;line-height:1.25;margin-bottom:.15rem">${esc(p.name||'Unnamed')}</div>
+          ${p.vendorName?`<div style="font-size:.6rem;color:#a09a92">${esc(p.vendorName)}</div>`:''}
+          ${p.cost!=null?`<div style="font-size:.65rem;font-weight:600;color:#1a1814;margin-top:.15rem">$${p.cost}</div>`:''}
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function toggleReviewSelect(id){
+  const idx=CAT.reviewSelected.indexOf(id);
+  if(idx>=0)CAT.reviewSelected.splice(idx,1);
+  else CAT.reviewSelected.push(id);
+  renderReviewScreen();
+}
+
+function selectAllReview(){
+  CAT.reviewSelected=[...CAT.reviewProducts.map(p=>p.id)];
+  renderReviewScreen();
+}
+
+function confirmReview(){
+  const toAdd=CAT.reviewProducts.filter(p=>CAT.reviewSelected.includes(p.id));
+  toAdd.forEach(p=>{
+    if(!CAT.products.some(x=>x.id===p.id))CAT.products.push(p);
+  });
+  catSaveProducts();
+  CAT.screen='catalog';
+  CAT.reviewProducts=[];
+  CAT.reviewSelected=[];
+  renderCatalogTabs();
+  renderCatalog();
+  setStatus(`${toAdd.length} products added to catalog`,'ok');
+}
+
+/* ── Export HTML Catalog ── */
+function exportCatalogHTML(){
+  const date=new Date().toISOString().slice(0,10);
+  const byCat={};
+  CAT.products.forEach(p=>{
+    if(!byCat[p.category])byCat[p.category]=[];
+    byCat[p.category].push(p);
+  });
+  let html=`<!DOCTYPE html><html><head><title>Product Catalog ${date}</title>
+  <style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:2rem}
+  h1{font-size:20px;margin-bottom:.5rem}h2{font-size:14px;border-bottom:2px solid #1a1814;margin-top:2rem;padding-bottom:.3rem}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:1rem}
+  .card{border:1px solid #ddd;border-radius:6px;overflow:hidden;page-break-inside:avoid}
+  .card img{width:100%;height:140px;object-fit:contain;background:#fff;padding:8px}
+  .card-body{padding:8px 10px}
+  .name{font-weight:bold;font-size:11px;margin-bottom:4px}
+  .meta{font-size:10px;color:#666;line-height:1.5}
+  @media print{@page{margin:1.5cm}.grid{grid-template-columns:repeat(3,1fr)}}</style></head><body>
+  <h1>Product Catalog</h1><p style="color:#666;font-size:11px">Generated ${date} · ${CAT.products.length} products</p>`;
+  const catLabels={tee:'T-Shirts',longsleeve:'Long Sleeve',hoodie:'Hoodies',crew:'Crew Necks',hat:'Hats',jacket:'Jackets',polo:'Polos',tank:'Tanks',other:'Other'};
+  Object.entries(byCat).forEach(([cat,products])=>{
+    html+=`<h2>${catLabels[cat]||cat} (${products.length})</h2><div class="grid">`;
+    products.forEach(p=>{
+      html+=`<div class="card">
+        ${p.image?`<img src="${p.image}" alt="${esc(p.name)}"/>`:`<div style="height:140px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#ccc">No image</div>`}
+        <div class="card-body">
+          <div class="name">${esc(p.name)}</div>
+          <div class="meta">
+            <strong>${esc(p.vendorName||'')}</strong><br>
+            ${p.vendorNumber?`Style #: ${esc(p.vendorNumber)}<br>`:''}
+            ${p.style?`Style: ${esc(p.style)}<br>`:''}
+            ${p.cost!=null?`Cost: $${p.cost} `:''}${p.price!=null?`Retail: $${p.price}<br>`:'<br>'}
+            ${p.moq!=null?`MOQ: ${p.moq} `:''}${p.orderDates?`Order by: ${esc(p.orderDates)}<br>`:'<br>'}
+            ${p.colors?`Colors: ${esc(p.colors)}<br>`:''}
+            ${p.sizes?`Sizes: ${esc(p.sizes)}<br>`:''}
+          </div>
+        </div>
+      </div>`;
+    });
+    html+=`</div>`;
+  });
+  html+=`</body></html>`;
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`catalog-${date}.html`;a.click();
   URL.revokeObjectURL(url);
 }
 
