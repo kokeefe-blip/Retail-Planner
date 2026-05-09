@@ -917,6 +917,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
                 <th class="text-left px-3 py-2.5 hidden lg:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Call Time</th>
                 <th class="text-left px-3 py-2.5 hidden lg:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Gates</th>
                 <th class="text-left px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Kickoff</th>
+                <th class="text-right px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Net Sales</th>
                 <th class="px-3 py-2.5 no-print"></th>
               </tr>
             </thead>
@@ -1276,14 +1277,28 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
         </button>
       </div>
 
-      <!-- Team filter -->
-      <div class="flex items-center gap-2 mb-5 no-print">
+      <!-- Year tabs + Team filter -->
+      <div class="flex items-center gap-2 mb-3 flex-wrap no-print">
+        <span class="section-label">Year:</span>
+        <div class="flex gap-1.5 flex-wrap" id="evtd-year-tabs"></div>
+      </div>
+      <div class="flex items-center gap-2 mb-5 flex-wrap no-print">
         <span class="section-label">Team:</span>
         <div class="flex rounded-lg border border-stone-200 overflow-hidden" style="height:1.75rem">
           <button id="evtd-all"     onclick="setEvtDataFilter('all')"     class="px-3 text-xs font-semibold transition dt-active">All</button>
           <button id="evtd-Timbers" onclick="setEvtDataFilter('Timbers')" class="px-3 text-xs font-semibold transition dt-inactive border-l border-stone-200">Timbers</button>
           <button id="evtd-Thorns"  onclick="setEvtDataFilter('Thorns')"  class="px-3 text-xs font-semibold transition dt-inactive border-l border-stone-200">Thorns</button>
         </div>
+        <div class="flex-1"></div>
+        <span class="section-label">Sort:</span>
+        <select id="evtd-sort" onchange="renderEventDataPage()" class="text-xs border border-stone-200 rounded-md px-2 py-1 bg-white text-stone-600" style="font-family:inherit;height:1.75rem">
+          <option value="date-asc">Date ↑</option>
+          <option value="date-desc">Date ↓</option>
+          <option value="sales-desc">Sales ↓</option>
+          <option value="sales-asc">Sales ↑</option>
+          <option value="year-desc">Year ↓</option>
+          <option value="year-asc">Year ↑</option>
+        </select>
       </div>
 
       <!-- Summary totals -->
@@ -1359,7 +1374,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
       </div>
 
       <!-- Summary cards -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5" id="hist-summary"></div>
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5" id="hist-summary"></div>
 
       <!-- Data table -->
       <div class="paper rounded-xl overflow-hidden">
@@ -1370,10 +1385,9 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
           <table class="w-full">
             <thead>
               <tr class="row-div">
-                <th class="text-left px-4 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Year</th>
-                <th class="text-left px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Date</th>
+                <th class="text-left px-4 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Date</th>
                 <th class="text-left px-3 py-2.5 hidden sm:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Day</th>
-                <th class="text-left px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Event Tag</th>
+                <th class="text-left px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Event</th>
                 <th class="text-right px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Orders</th>
                 <th class="text-right px-3 py-2.5" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Net Sales</th>
                 <th class="text-right px-3 py-2.5 hidden md:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Units</th>
@@ -2608,7 +2622,14 @@ const STORES={
     local: '__historicals__',
     get:   ()=>({rows:HIST.rows}),
     set:   d=>{HIST.rows=d.rows||[];},
-    after: ()=>{if(S.view==='data'&&DR.activeTab==='historicals')renderHistoricalsPage();}
+    after: ()=>{
+      if(S.view==='data'){
+        if(DR.activeTab==='historicals')renderHistoricalsPage();
+        else if(DR.activeTab==='events')renderEventDataPage();
+        // Also refresh overview chart since historicals feeds event data
+        else renderDataPage();
+      }
+    }
   },
 };
 
@@ -2726,7 +2747,7 @@ function ingestCSV(text){
 }
 
 function clearEvents(){
-  if(!confirm('Remove all imported events?'))return;
+  if(!confirm('Remove all imported events?\n\nThis cannot be undone.'))return;
   S.events=[];
   saveEvents();
   renderPlanningList();
@@ -2749,6 +2770,18 @@ function setEvtTab(tab){
     el.className='px-3 text-xs font-semibold transition'+(t!=='events'?' border-l border-stone-200':'')+(t===tab?' bg-stone-100 text-stone-700':' text-stone-400 hover:bg-stone-50');
   });
   if(tab==='chrono')renderChronoList();
+}
+
+/* Look up net sales for an event from historicals (date + year must match) */
+function histSalesForEvent(date, team){
+  if(!date)return null;
+  const year=date.slice(0,4);
+  const h=HIST.rows.find(r=>r.date===date&&String(r.year)===year&&(!team||r.team===team));
+  if(h&&+h.netSales>0)return +h.netSales;
+  // Also check DR.entries for manual entries
+  const entry=DR.entries.find(e=>e.date===date&&e.category==='Event'&&(!team||e.team===team));
+  if(entry&&+entry.sales>0)return +entry.sales;
+  return null;
 }
 
 function renderPlanningList(){
@@ -2836,6 +2869,7 @@ function renderPlanningList(){
               <th class="text-left px-3 py-2 hidden lg:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Call Time</th>
               <th class="text-left px-3 py-2 hidden lg:table-cell" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Gates</th>
               <th class="text-left px-3 py-2" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Kickoff</th>
+              <th class="text-right px-3 py-2" style="font-size:.52rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#a09a92">Net Sales</th>
               <th class="px-3 py-2 no-print"></th>
             </tr>
           </thead>
@@ -2848,6 +2882,8 @@ function renderPlanningList(){
       const realIdx=S.events.indexOf(e);
       let d;try{d=parseKey(e.date);}catch{return;}
       const dateStr=MONS_SHORT[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+      const sales=histSalesForEvent(e.date,e.team);
+      const hasSales=sales!==null;
       const tr=document.createElement('tr');
       tr.className='evt-row';
       tr.dataset.idx=realIdx;
@@ -2866,6 +2902,10 @@ function renderPlanningList(){
         <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92;white-space:nowrap" class="hidden lg:table-cell">${e.callTime||'—'}</td>
         <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92;white-space:nowrap" class="hidden lg:table-cell">${e.gates||'—'}</td>
         <td style="padding:.4rem .75rem;font-size:.72rem;font-weight:500;white-space:nowrap">${e.kickoff||'—'}</td>
+        <td style="padding:.4rem .75rem;text-align:right;font-weight:${hasSales?700:400};color:${hasSales?'#1a1814':'#c4bfb7'};white-space:nowrap"
+            onclick="event.stopPropagation();openDataEntryForDate('${e.date}','${e.team||''}')">
+          ${hasSales?fmt$(sales):'—'}
+        </td>
         <td class="no-print" style="padding:.4rem .75rem">
           <button onclick="event.stopPropagation();removeEvent(${realIdx})"
             style="font-size:.6rem;color:#a09a92;background:none;border:none;cursor:pointer;padding:.1rem .2rem"
@@ -3140,6 +3180,10 @@ function renderChronoList(){
       <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92;white-space:nowrap" class="hidden lg:table-cell">${e.callTime||'—'}</td>
       <td style="padding:.4rem .75rem;font-size:.72rem;color:#a09a92;white-space:nowrap" class="hidden lg:table-cell">${e.gates||'—'}</td>
       <td style="padding:.4rem .75rem;font-size:.72rem;font-weight:500;white-space:nowrap">${e.kickoff||'—'}</td>
+      <td style="padding:.4rem .75rem;text-align:right;font-weight:${(()=>{const s=histSalesForEvent(e.date,e.team);return s?700:400;})()};color:${(()=>{const s=histSalesForEvent(e.date,e.team);return s?'#1a1814':'#c4bfb7';})()};white-space:nowrap;cursor:pointer"
+          onclick="event.stopPropagation();openDataEntryForDate('${e.date}','${e.team||''}')">
+        ${(()=>{const s=histSalesForEvent(e.date,e.team);return s?fmt$(s):'—';})()}
+      </td>
       <td class="no-print" style="padding:.4rem .75rem">
         <button onclick="event.stopPropagation();removeEvent(${realIdx})"
           style="font-size:.6rem;color:#a09a92;background:none;border:none;cursor:pointer;padding:.1rem .2rem"
@@ -4199,7 +4243,15 @@ const DR={
   editId:null,
   activeCat:'Event',
   chartInstance:null,
+  activeTab:'overview',
+  ptFilter:'all',
+  ptChartInstance:null,
+  evtDataFilter:'all',
+  evtDataMetric:'sales',
+  evtDataChartInstance:null,
+  evtDataYear:'all',
 };
+
 
 const TEAM_COLORS={Timbers:'#7a9e7e',Thorns:'#d4856a'};
 const CAT_LABELS={Event:'Event Sales',Ecomm:'Ecommerce',DarkDay:'Dark Day'};
@@ -4222,6 +4274,7 @@ function showData(){
   renderDataPage();
   if(DR.activeTab==='products')renderProductPage();
   if(DR.activeTab==='events')renderEventDataPage();
+  if(DR.activeTab==='historicals')renderHistoricalsPage();
 }
 
 function renderDataPage(){
@@ -4520,7 +4573,7 @@ function deleteDataEntryById(id){
 }
 
 function clearDataEntries(){
-  if(!confirm('Delete all data entries?'))return;
+  if(!confirm('Delete all data entries?\n\nThis cannot be undone.'))return;
   DR.entries=[];drSave();renderDataPage();
 }
 
@@ -4576,9 +4629,6 @@ function downloadDataTemplate(){
 /* ══════════════════════════════════════════
    DATA TABS
 ══════════════════════════════════════════ */
-DR.activeTab='overview';
-DR.ptFilter='all';
-DR.ptChartInstance=null;
 
 function setDataTab(tab){
   DR.activeTab=tab;
@@ -4866,7 +4916,7 @@ function parseProductCSV(text,overwrite){
 }
 
 function clearProductData(){
-  if(!confirm('Clear all product data?'))return;
+  if(!confirm('Clear all product data?\n\nThis cannot be undone.'))return;
   PT.rows=[];ptSave();
   renderProductPage();
 }
@@ -5115,9 +5165,11 @@ function startIcalAutoSync(){
    Joins S.events (game schedule) with DR.entries (sales data)
    one row per event date showing all fields
 ══════════════════════════════════════════ */
-DR.evtDataFilter='all';
-DR.evtDataMetric='sales';
-DR.evtDataChartInstance=null;
+
+function setEvtDataYear(y){
+  DR.evtDataYear=y;
+  renderEventDataPage();
+}
 
 function setEvtDataFilter(f){
   DR.evtDataFilter=f;
@@ -5139,7 +5191,7 @@ function setEvtDataMetric(m){
 
 function renderEventDataPage(){
   // Build merged rows: one per event date
-  // Join S.events dates with DR.entries of category=Event
+  // Sources: S.events (schedule) + DR.entries (manual) + HIST.rows (historicals)
   const eventDates={};
 
   // Start with all game schedule events
@@ -5150,7 +5202,6 @@ function renderEventDataPage(){
       promotion:ev.promotion,kickoff:ev.kickoff,
       sales:0,attendance:0,perCap:0,entries:[]
     };
-    // Fill schedule info (may have multiple events same day — use first)
     const row=eventDates[ev.date];
     if(!row.opponent&&ev.opponent)row.opponent=ev.opponent;
     if(!row.promotion&&ev.promotion)row.promotion=ev.promotion;
@@ -5158,7 +5209,32 @@ function renderEventDataPage(){
     if(!row.team&&ev.team)row.team=ev.team;
   });
 
-  // Overlay sales data from DR.entries
+  // Overlay historicals data (primary source for event sales)
+  HIST.rows.forEach(h=>{
+    if(!h.date||!h.year)return;
+    // Only map if the year in the hist row matches the year in the date
+    // e.g. year=2025 AND date=2025-04-19 → match
+    // year=2025 AND date=2024-04-19 → skip (date/year mismatch)
+    if(h.date.slice(0,4)!==String(h.year))return;
+    if(!eventDates[h.date])eventDates[h.date]={
+      date:h.date,team:h.team,opponent:h.opponent||'',
+      promotion:'',kickoff:'',sales:0,attendance:0,perCap:0,entries:[]
+    };
+    const row=eventDates[h.date];
+    if(!row.team&&h.team)row.team=h.team;
+    if(!row.opponent&&h.opponent)row.opponent=h.opponent;
+    if(!row._fromHist){
+      row.sales=(+h.netSales||0);
+      row.orders=(+h.orders||0);
+      row.units=(+h.units||0);
+      row.aov=(+h.aov||0);
+      row.avgBasket=(+h.avgBasket||0);
+      row._fromHist=true;
+      row._histYear=h.year;
+    }
+  });
+
+  // Overlay DR.entries (manual entries override historicals)
   DR.entries.filter(e=>e.category==='Event').forEach(e=>{
     if(!eventDates[e.date])eventDates[e.date]={
       date:e.date,team:e.team,opponent:'',promotion:'',kickoff:'',
@@ -5169,6 +5245,7 @@ function renderEventDataPage(){
     row.attendance+=(+e.attendance||0);
     row.entries.push(e);
     if(!row.team&&e.team)row.team=e.team;
+    row._fromHist=false; // manual overrides historical
   });
 
   // Recalc per cap
@@ -5176,70 +5253,156 @@ function renderEventDataPage(){
     r.perCap=r.attendance?+(r.sales/r.attendance).toFixed(2):0;
   });
 
-  let rows=Object.values(eventDates).sort((a,b)=>a.date.localeCompare(b.date));
+  let rows=Object.values(eventDates);
+
+  // Build year tabs from all available data
+  const allYears=[...new Set(rows.map(r=>r.date.slice(0,4)).filter(Boolean))].sort().reverse();
+  const ytEl=document.getElementById('evtd-year-tabs');
+  if(ytEl){
+    ytEl.innerHTML=[{val:'all',label:'All Years'},...allYears.map(y=>({val:y,label:y}))]
+      .map(({val,label})=>{
+        const active=DR.evtDataYear===val;
+        return `<button onclick="setEvtDataYear('${val}')"
+          class="px-2.5 py-1 rounded-md text-xs font-semibold transition ${active?'dt-active':'dt-inactive'}"
+          style="${val!=='all'?'border:1px solid #e0ddd6':''}">${label}</button>`;
+      }).join('');
+  }
+
+  // Apply year filter
+  if(DR.evtDataYear!=='all')rows=rows.filter(r=>r.date.startsWith(DR.evtDataYear));
 
   // Apply team filter
   if(DR.evtDataFilter!=='all')rows=rows.filter(r=>r.team===DR.evtDataFilter);
 
-  // Date range label
-  const rangeEl=document.getElementById('evt-data-range');
-  if(rangeEl&&rows.length){
-    try{
-      const first=parseKey(rows[0].date),last=parseKey(rows[rows.length-1].date);
-      rangeEl.textContent=`${MONS_SHORT[first.getMonth()]} ${first.getDate()} – ${MONS_SHORT[last.getMonth()]} ${last.getDate()}, ${last.getFullYear()}`;
-    }catch{rangeEl.textContent='';}
-  } else if(rangeEl) rangeEl.textContent='';
+  // Apply sort
+  const sortVal=(document.getElementById('evtd-sort')||{}).value||'date-asc';
+  rows.sort((a,b)=>{
+    switch(sortVal){
+      case 'date-asc':  return a.date.localeCompare(b.date);
+      case 'date-desc': return b.date.localeCompare(a.date);
+      case 'sales-desc':return b.sales-a.sales;
+      case 'sales-asc': return a.sales-b.sales;
+      case 'year-desc': return b.date.slice(0,4).localeCompare(a.date.slice(0,4))||a.date.localeCompare(b.date);
+      case 'year-asc':  return a.date.slice(0,4).localeCompare(b.date.slice(0,4))||a.date.localeCompare(b.date);
+      default: return a.date.localeCompare(b.date);
+    }
+  });
 
-  // Summary stats
-  const totalSales=rows.reduce((s,r)=>s+r.sales,0);
-  const totalAtt=rows.reduce((s,r)=>s+r.attendance,0);
-  const avgPerCap=totalAtt?totalSales/totalAtt:0;
+  // Summary stats — all filtered rows + per-team breakdown
+  const allRows=rows;
+  const tRows=rows.filter(r=>r.team==='Timbers');
+  const thRows=rows.filter(r=>r.team==='Thorns');
+
+  function teamStats(arr){
+    const n=arr.length;
+    const totalSales=arr.reduce((s,r)=>s+r.sales,0);
+    const totalOrders=arr.reduce((s,r)=>s+(+r.orders||0),0);
+    const totalAtt=arr.reduce((s,r)=>s+r.attendance,0);
+    const avgSales=n?totalSales/n:0;
+    const avgOrders=n?totalOrders/n:0;
+    const aovRows=arr.filter(r=>+r.aov>0);
+    const avgAOV=aovRows.length?aovRows.reduce((s,r)=>s+(+r.aov||0),0)/aovRows.length:0;
+    return{n,totalSales,totalOrders,totalAtt,avgSales,avgOrders,avgAOV};
+  }
+
+  const all=teamStats(allRows);
+  const tim=teamStats(tRows);
+  const tho=teamStats(thRows);
+
   const sumEl=document.getElementById('evtd-summary');
-  if(sumEl) sumEl.innerHTML=`
-    <div class="dash-stat"><div class="dash-stat-num">${fmt$(totalSales)}</div><div class="dash-stat-label">Total Sales</div></div>
-    <div class="dash-stat"><div class="dash-stat-num">${fmtN(totalAtt)}</div><div class="dash-stat-label">Total Attendance</div></div>
-    <div class="dash-stat"><div class="dash-stat-num">${fmt$(avgPerCap)}</div><div class="dash-stat-label">Avg Per Cap</div></div>
-    <div class="dash-stat"><div class="dash-stat-num">${rows.length}</div><div class="dash-stat-label">Events</div></div>
-  `;
+  if(sumEl){
+    const statBlock=(label,color,stats)=>`
+      <div class="dash-stat" style="border-top:2.5px solid ${color}">
+        <div style="font-size:.55rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:${color};margin-bottom:.3rem">${label} · ${stats.n} events</div>
+        <div style="font-size:1rem;font-weight:700;color:#1a1814">${fmt$(stats.totalSales)}</div>
+        <div class="dash-stat-label">Total Sales</div>
+        <div style="height:.5px;background:#e0ddd6;margin:.4rem 0"></div>
+        <div style="font-size:.85rem;font-weight:700;color:#1a1814">${fmt$(stats.avgSales)}</div>
+        <div class="dash-stat-label">Avg / Event</div>
+        ${stats.totalOrders?`<div style="margin-top:.25rem;font-size:.65rem;color:#6a6460">Avg Orders: ${fmtN(Math.round(stats.avgOrders))} · AOV ${fmt$(stats.avgAOV)}</div>`:""}
+      </div>`;
+    sumEl.innerHTML=
+      statBlock('All',  '#1a1814', all)+
+      statBlock('Timbers','#7a9e7e', tim)+
+      statBlock('Thorns', '#d4856a', tho);
+  }
 
-  // Chart
   renderEvtDataChart(rows);
 
-  // Count
   const countEl=document.getElementById('evtd-count');
-  if(countEl)countEl.textContent=rows.length+' event'+(rows.length!==1?'s':'')+(rows.length?'':' — add entries on the Overview tab or import a CSV');
+  if(countEl)countEl.textContent=rows.length+' event'+(rows.length!==1?'s':''+(rows.length?'':' — import historicals to get started'));
 
-  // Table
   const tbody=document.getElementById('evtd-tbody');
   if(!tbody)return;
-  tbody.innerHTML=rows.map(r=>{
+
+  const tableRows=[...rows].sort((a,b)=>{
+    if(a.date.slice(0,4)!==b.date.slice(0,4))return b.date.slice(0,4).localeCompare(a.date.slice(0,4));
+    if(a.team!==b.team)return a.team.localeCompare(b.team);
+    return a.date.localeCompare(b.date);
+  });
+
+  let lastYear2='', lastTeam2='';
+  tbody.innerHTML=tableRows.map(r=>{
     let d;try{d=parseKey(r.date);}catch{return '';}
-    const dateStr=MONS_SHORT[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
-    const dayName=DAYS_LONG[d.getDay()];
+    const dateStr=`${d.getMonth()+1}/${d.getDate()}`;
+    const year=r.date.slice(0,4);
     const tc=TEAM_COLORS[r.team]||'#8a8a8a';
     const matchup=r.opponent?`vs ${r.opponent}`:(r.promotion||'—');
     const hasSales=r.sales>0;
-    return `<tr style="border-bottom:.5px solid #e0ddd6;cursor:pointer;transition:background .1s"
+    let seps='';
+
+    if(year!==lastYear2){
+      lastYear2=year;lastTeam2='';
+      const yrs=tableRows.filter(x=>x.date.startsWith(year));
+      const yTotal=yrs.reduce((s,x)=>s+x.sales,0);
+      const yAvg=yrs.length?yTotal/yrs.length:0;
+      const yT=yrs.filter(x=>x.team==='Timbers');
+      const yTh=yrs.filter(x=>x.team==='Thorns');
+      seps+=`<tr style="background:#1a1814"><td colspan="8" style="padding:.45rem 1rem">
+        <div style="display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap">
+          <span style="font-size:.65rem;font-weight:700;letter-spacing:.25em;color:#faf9f6">${year}</span>
+          <span style="font-size:.58rem;color:#a09a92">${yrs.length} events</span>
+          <span style="font-size:.58rem;color:#a09a92">Total: <strong style="color:#faf9f6">${fmt$(yTotal)}</strong></span>
+          <span style="font-size:.58rem;color:#a09a92">Avg: <strong style="color:#faf9f6">${fmt$(yAvg)}</strong></span>
+          <span style="font-size:.58rem;color:#7a9e7e">${yT.length} Timbers</span>
+          <span style="font-size:.58rem;color:#d4856a">${yTh.length} Thorns</span>
+        </div></td></tr>`;
+    }
+
+    if(r.team!==lastTeam2){
+      lastTeam2=r.team;
+      const trs=tableRows.filter(x=>x.date.startsWith(year)&&x.team===r.team);
+      const tTotal=trs.reduce((s,x)=>s+x.sales,0);
+      const tAvg=trs.length?tTotal/trs.length:0;
+      const tOrd=trs.reduce((s,x)=>s+(+x.orders||0),0);
+      seps+=`<tr style="background:${tc}15;border-bottom:1px solid ${tc}30"><td colspan="8" style="padding:.3rem 1rem">
+        <div style="display:flex;align-items:baseline;gap:.75rem;flex-wrap:wrap">
+          <div style="width:7px;height:7px;border-radius:50%;background:${tc};flex-shrink:0"></div>
+          <span style="font-size:.6rem;font-weight:700;color:${tc};letter-spacing:.1em;text-transform:uppercase">${r.team}</span>
+          <span style="font-size:.57rem;color:#a09a92">${trs.length} events · Total ${fmt$(tTotal)} · Avg ${fmt$(tAvg)}</span>
+          ${tOrd?`<span style="font-size:.57rem;color:#a09a92">Avg Orders ${fmtN(Math.round(tOrd/trs.length))}</span>`:""}
+        </div></td></tr>`;
+    }
+
+    return seps+`<tr style="border-bottom:.5px solid #e0ddd6;cursor:pointer;transition:background .1s"
       onclick="openDataEntryForDate('${r.date}','${r.team}')"
-      onmouseover="this.style.background='#f5f2ed'" onmouseout="this.style.background=''">
-      <td style="padding:.55rem .75rem;font-size:.72rem;white-space:nowrap">
+      onmouseover="this.style.background='#faf9f6'" onmouseout="this.style.background=''">
+      <td style="padding:.5rem .75rem;font-size:.72rem;white-space:nowrap">
         <div style="font-weight:600">${dateStr}</div>
-        <div style="font-size:.6rem;color:#a09a92">${dayName}${r.kickoff?' · '+r.kickoff:''}</div>
+        <div style="font-size:.6rem;color:#a09a92">${DAYS_LONG[d.getDay()]}${r.kickoff?' · '+r.kickoff:''}</div>
       </td>
-      <td style="padding:.55rem .75rem;font-size:.72rem">${esc(matchup)}</td>
-      <td style="padding:.55rem .75rem" class="hidden sm:table-cell">
-        <span style="font-size:.62rem;font-weight:600;color:${tc}">${r.team||'—'}</span>
+      <td style="padding:.5rem .75rem;font-size:.72rem">${esc(matchup)}</td>
+      <td style="padding:.5rem .75rem" class="hidden sm:table-cell">
+        <span style="font-size:.6rem;font-weight:600;color:${tc}">${r.team||'—'}</span>
       </td>
-      <td style="padding:.55rem .75rem;text-align:right;font-weight:${hasSales?700:400};color:${hasSales?'#1a1814':'#c4bfb7'}">${hasSales?fmt$(r.sales):'—'}</td>
-      <td style="padding:.55rem .75rem;text-align:right;color:#6a6460" class="hidden md:table-cell">${r.attendance?fmtN(r.attendance):'—'}</td>
-      <td style="padding:.55rem .75rem;text-align:right;color:#6a6460" class="hidden md:table-cell">${r.perCap?fmt$(r.perCap):'—'}</td>
-      <td style="padding:.55rem .75rem;font-size:.65rem;color:#6a6460" class="hidden lg:table-cell">${esc(r.promotion||'—')}</td>
-      <td style="padding:.55rem .75rem" class="no-print">
+      <td style="padding:.5rem .75rem;text-align:right;font-weight:${hasSales?700:400};color:${hasSales?'#1a1814':'#c4bfb7'}">${hasSales?fmt$(r.sales):'—'}</td>
+      <td style="padding:.5rem .75rem;text-align:right;color:#6a6460" class="hidden md:table-cell">${r.orders?fmtN(r.orders):'—'}</td>
+      <td style="padding:.5rem .75rem;text-align:right;color:#6a6460" class="hidden md:table-cell">${r.attendance?fmtN(r.attendance):'—'}</td>
+      <td style="padding:.5rem .75rem;text-align:right;color:#6a6460" class="hidden lg:table-cell">${r.perCap?fmt$(r.perCap):'—'}</td>
+      <td style="padding:.5rem .75rem" class="no-print">
         <button onclick="event.stopPropagation();openDataEntryForDate('${r.date}','${r.team}')"
           style="font-size:.65rem;color:#a09a92;background:none;border:none;cursor:pointer;padding:.1rem .3rem"
-          onmouseover="this.style.color='#1a1814'" onmouseout="this.style.color='#a09a92'">
-          ${hasSales?'✎':'+ Sales'}
-        </button>
+          onmouseover="this.style.color='#1a1814'" onmouseout="this.style.color='#a09a92'">${hasSales?'✎':'+ Sales'}</button>
       </td>
     </tr>`;
   }).join('');
@@ -5346,16 +5509,13 @@ function downloadEventDataTemplate(){
 function histTeamFromTag(tag){
   if(!tag)return'';
   const u=tag.toUpperCase();
-  if(u.startsWith('TIMBERS')||u.startsWith('PORTLAND'))return'Timbers';
-  if(u.startsWith('THORNS'))return'Thorns';
-  // Try splitting on colon
-  const parts=tag.split(':');
-  if(parts.length>1){
-    const t=parts[0].trim().toLowerCase();
-    if(t.includes('timbers'))return'Timbers';
-    if(t.includes('thorns'))return'Thorns';
-  }
-  return tag.split(':')[0].trim();
+  // Check full string for either keyword — order matters: Thorns first to avoid
+  // false positives if someone writes "Thorns-Timbers" style tags
+  if(u.includes('THORNS'))return'Thorns';
+  if(u.includes('TIMBERS'))return'Timbers';
+  // Fall back to the part before the colon as team name
+  const colon=tag.indexOf(':');
+  return colon>0?tag.slice(0,colon).trim():tag.trim();
 }
 
 function setHistFilter(val,type){
@@ -5365,103 +5525,205 @@ function setHistFilter(val,type){
 }
 
 function renderHistoricalsPage(){
+  const sumEl=document.getElementById('hist-summary');
+  const tbody=document.getElementById('hist-tbody');
+  const countEl=document.getElementById('hist-count');
+  const clearBtn=document.getElementById('hist-clear-btn');
+  const ytEl=document.getElementById('hist-year-tabs');
+
   if(!HIST.rows.length){
-    const countEl=document.getElementById('hist-count');
     if(countEl)countEl.textContent='No historical data — import a CSV to get started';
-    const clearBtn=document.getElementById('hist-clear-btn');
     if(clearBtn)clearBtn.style.display='none';
-    document.getElementById('hist-summary').innerHTML='';
-    document.getElementById('hist-tbody').innerHTML='';
-    document.getElementById('hist-year-tabs').innerHTML='';
+    if(sumEl)sumEl.innerHTML='';
+    if(tbody)tbody.innerHTML='';
+    if(ytEl)ytEl.innerHTML='';
     return;
   }
 
-  const clearBtn=document.getElementById('hist-clear-btn');
   if(clearBtn)clearBtn.style.display='';
 
-  // Build year list
-  const years=['all',...[...new Set(HIST.rows.map(r=>r.year))].sort()];
+  // Build year list from data
+  const years=[...new Set(HIST.rows.map(r=>r.year))].sort();
 
-  // Year tabs
-  const ytEl=document.getElementById('hist-year-tabs');
+  // Year tab buttons
   if(ytEl){
-    ytEl.innerHTML=years.map(y=>{
-      const active=HIST.filterYear===y;
-      return `<button onclick="setHistFilter('${y}','year')"
-        class="px-2.5 py-1 rounded-md text-xs font-semibold transition ${active?'dt-active':'dt-inactive'}"
-        style="${y!=='all'?'border:1px solid #e0ddd6':''}">${y==='all'?'All Years':y}</button>`;
-    }).join('');
+    ytEl.innerHTML=[{val:'all',label:'All Years'},...years.map(y=>({val:y,label:y}))]
+      .map(({val,label})=>{
+        const active=HIST.filterYear===val;
+        return `<button onclick="setHistFilter('${val}','year')"
+          class="px-2.5 py-1 rounded-md text-xs font-semibold transition ${active?'dt-active':'dt-inactive'}"
+          style="${val!=='all'?'border:1px solid #e0ddd6':''}">${label}</button>`;
+      }).join('');
   }
 
-  // Team filter buttons
+  // Team filter
   ['all','Timbers','Thorns'].forEach(t=>{
     const el=document.getElementById('histf-'+(t==='all'?'all':t));
     if(!el)return;
-    const active=HIST.filterTeam===t;
-    el.className='px-3 text-xs font-semibold transition'+(t!=='all'?' border-l border-stone-200':'')+(active?' dt-active':' dt-inactive');
+    el.className='px-3 text-xs font-semibold transition'+(t!=='all'?' border-l border-stone-200':'')+(t===HIST.filterTeam?' dt-active':' dt-inactive');
   });
 
-  // Filter rows
+  // Filter + sort rows
   let rows=HIST.rows.filter(r=>{
     if(HIST.filterYear!=='all'&&r.year!==HIST.filterYear)return false;
     if(HIST.filterTeam!=='all'&&r.team!==HIST.filterTeam)return false;
     return true;
   });
-  rows=[...rows].sort((a,b)=>a.date.localeCompare(b.date));
+  // Always re-derive team from eventTag so filter is always accurate
+  rows.forEach(r=>{
+    const derived=histTeamFromTag(r.eventTag);
+    if(derived)r.team=derived;
+    else if(!r.team)r.team='Unknown';
+  });
 
-  // Summary
-  const totalOrders=rows.reduce((s,r)=>s+(+r.orders||0),0);
+  rows=[...rows].sort((a,b)=>{
+    if(a.year!==b.year)return b.year.localeCompare(a.year); // newest year first
+    if(a.team!==b.team)return a.team.localeCompare(b.team); // Timbers before Thorns
+    return a.date.localeCompare(b.date); // chronological within team
+  });
+
+  // Per-event summary (averages, not totals)
+  const numEvents=rows.length;
+  const timbersEvents=rows.filter(r=>r.team==='Timbers');
+  const thornsEvents=rows.filter(r=>r.team==='Thorns');
+
   const totalSales=rows.reduce((s,r)=>s+(+r.netSales||0),0);
+  const totalOrders=rows.reduce((s,r)=>s+(+r.orders||0),0);
   const totalUnits=rows.reduce((s,r)=>s+(+r.units||0),0);
-  const avgAOV=rows.length?rows.reduce((s,r)=>s+(+r.aov||0),0)/rows.filter(r=>r.aov).length:0;
-  const avgBasket=rows.length?rows.reduce((s,r)=>s+(+r.avgBasket||0),0)/rows.filter(r=>r.avgBasket).length:0;
+  const rowsWithAOV=rows.filter(r=>+r.aov>0);
+  const rowsWithBasket=rows.filter(r=>+r.avgBasket>0);
 
-  const sumEl=document.getElementById('hist-summary');
+  const avgSales=numEvents?totalSales/numEvents:0;
+  const avgOrders=numEvents?totalOrders/numEvents:0;
+  const avgUnits=numEvents?totalUnits/numEvents:0;
+  const avgAOV=rowsWithAOV.length?rowsWithAOV.reduce((s,r)=>s+(+r.aov||0),0)/rowsWithAOV.length:0;
+  const avgBasket=rowsWithBasket.length?rowsWithBasket.reduce((s,r)=>s+(+r.avgBasket||0),0)/rowsWithBasket.length:0;
+
   if(sumEl) sumEl.innerHTML=`
-    <div class="dash-stat"><div class="dash-stat-num">${fmt$(totalSales)}</div><div class="dash-stat-label">Total Net Sales</div></div>
-    <div class="dash-stat"><div class="dash-stat-num">${fmtN(totalOrders)}</div><div class="dash-stat-label">Total Orders</div></div>
-    <div class="dash-stat"><div class="dash-stat-num">${fmtN(totalUnits)}</div><div class="dash-stat-label">Total Units</div></div>
-    <div class="dash-stat"><div class="dash-stat-num">${fmt$(avgAOV)}</div><div class="dash-stat-label">Avg AOV</div></div>
+    <!-- Events count -->
+    <div class="dash-stat" style="border-top:2.5px solid #1a1814">
+      <div class="dash-stat-num">${numEvents}</div>
+      <div class="dash-stat-label">Events</div>
+      <div style="font-size:.55rem;color:#a09a92;margin-top:.3rem">
+        <span style="color:#7a9e7e">${timbersEvents.length} Timbers</span> · 
+        <span style="color:#d4856a">${thornsEvents.length} Thorns</span>
+      </div>
+    </div>
+
+    <!-- Net Sales: total + avg -->
+    <div class="dash-stat" style="border-top:2.5px solid #1a1814">
+      <div class="dash-stat-num">${fmt$(totalSales)}</div>
+      <div class="dash-stat-label">Total Net Sales</div>
+      <div style="height:.5px;background:#e0ddd6;margin:.55rem 0"></div>
+      <div style="font-size:1rem;font-weight:700;color:#1a1814">${fmt$(avgSales)}</div>
+      <div class="dash-stat-label">Avg / Event</div>
+    </div>
+
+    <!-- Orders: total + avg -->
+    <div class="dash-stat" style="border-top:2.5px solid #1a1814">
+      <div class="dash-stat-num">${fmtN(totalOrders)}</div>
+      <div class="dash-stat-label">Total Orders</div>
+      <div style="height:.5px;background:#e0ddd6;margin:.55rem 0"></div>
+      <div style="font-size:1rem;font-weight:700;color:#1a1814">${fmtN(Math.round(avgOrders))}</div>
+      <div class="dash-stat-label">Avg / Event</div>
+    </div>
+
+    <!-- Units: total + avg -->
+    <div class="dash-stat" style="border-top:2.5px solid #1a1814">
+      <div class="dash-stat-num">${fmtN(totalUnits)}</div>
+      <div class="dash-stat-label">Total Units</div>
+      <div style="height:.5px;background:#e0ddd6;margin:.55rem 0"></div>
+      <div style="font-size:1rem;font-weight:700;color:#1a1814">${fmtN(Math.round(avgUnits))}</div>
+      <div class="dash-stat-label">Avg / Event</div>
+    </div>
+
+    <!-- AOV: avg only (no meaningful total) -->
+    <div class="dash-stat" style="border-top:2.5px solid #1a1814">
+      <div class="dash-stat-num">${fmt$(avgAOV)}</div>
+      <div class="dash-stat-label">Avg AOV</div>
+      <div style="height:.5px;background:#e0ddd6;margin:.55rem 0"></div>
+      <div style="font-size:1rem;font-weight:700;color:#1a1814">${avgBasket?fmtN(+avgBasket.toFixed(1)):'—'}</div>
+      <div class="dash-stat-label">Avg Basket Size</div>
+    </div>
   `;
 
-  const countEl=document.getElementById('hist-count');
-  if(countEl)countEl.textContent=`${rows.length} event${rows.length!==1?'s':''} · ${[...new Set(rows.map(r=>r.year))].sort().join(', ')}`;
+  if(countEl)countEl.textContent=`${numEvents} event${numEvents!==1?'s':''}`+
+    (HIST.filterYear==='all'?` · ${years.join(', ')}`:` · ${HIST.filterYear}`);
 
-  // Table
-  const tbody=document.getElementById('hist-tbody');
+  // Build table — each row is one event
+  // Match to S.events by date for enrichment (opponent, promotion, kickoff)
   if(!tbody)return;
-
   let lastYear='';
-  tbody.innerHTML=rows.map(r=>{
+  let lastTeam='';
+  tbody.innerHTML=rows.map((r,i)=>{
     const tc=TEAM_COLORS[r.team]||'#8a8a8a';
-    let yearSep='';
+    let seps='';
+
+    // Year separator
     if(r.year!==lastYear){
       lastYear=r.year;
-      yearSep=`<tr style="background:#f5f2ed">
-        <td colspan="10" style="padding:.35rem 1rem;font-size:.55rem;font-weight:700;letter-spacing:.2em;color:#a09a92">${r.year}</td>
+      lastTeam=''; // reset team tracker on year change
+      const yRows=rows.filter(x=>x.year===r.year);
+      const yTotal=yRows.reduce((s,x)=>s+(+x.netSales||0),0);
+      const yAvg=yRows.length?yTotal/yRows.length:0;
+      const yTimbers=yRows.filter(x=>x.team==='Timbers');
+      const yThorns=yRows.filter(x=>x.team==='Thorns');
+      seps+=`<tr style="background:#1a1814">
+        <td colspan="9" style="padding:.5rem 1rem">
+          <div style="display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap">
+            <span style="font-size:.65rem;font-weight:700;letter-spacing:.25em;color:#faf9f6">${r.year}</span>
+            <span style="font-size:.58rem;color:#a09a92">${yRows.length} events</span>
+            <span style="font-size:.58rem;color:#a09a92">Total: <strong style="color:#faf9f6">${fmt$(yTotal)}</strong></span>
+            <span style="font-size:.58rem;color:#a09a92">Avg: <strong style="color:#faf9f6">${fmt$(yAvg)}</strong></span>
+            <span style="font-size:.58rem;color:#7a9e7e">${yTimbers.length} Timbers</span>
+            <span style="font-size:.58rem;color:#d4856a">${yThorns.length} Thorns</span>
+          </div>
+        </td>
       </tr>`;
     }
-    // Format date nicely
-    let dateStr=r.date;
-    try{const d=parseKey(r.date);dateStr=MONS_SHORT[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();}catch{}
-    // Parse event tag display: "Timbers:Portland-Seattle" → "Portland vs Seattle"
-    const tagParts=r.eventTag?r.eventTag.split(':'):'';
-    const matchup=tagParts.length>1?tagParts[1].replace('-',' vs '):r.eventTag||'—';
 
-    return yearSep+`<tr style="border-bottom:.5px solid #e0ddd6;transition:background .1s"
-      onmouseover="this.style.background='#f5f2ed'" onmouseout="this.style.background=''">
-      <td style="padding:.45rem .75rem;font-size:.7rem;font-weight:600;color:${tc}">${r.year}</td>
-      <td style="padding:.45rem .75rem;font-size:.7rem;white-space:nowrap">${dateStr}</td>
+    // Team sub-separator within year
+    if(r.team!==lastTeam){
+      lastTeam=r.team;
+      const tRows=rows.filter(x=>x.year===r.year&&x.team===r.team);
+      const tTotal=tRows.reduce((s,x)=>s+(+x.netSales||0),0);
+      const tAvg=tRows.length?tTotal/tRows.length:0;
+      seps+=`<tr style="background:${tc}15;border-bottom:1px solid ${tc}30">
+        <td colspan="9" style="padding:.35rem 1rem">
+          <div style="display:flex;align-items:baseline;gap:.75rem">
+            <div style="width:7px;height:7px;border-radius:50%;background:${tc};flex-shrink:0;margin-bottom:1px"></div>
+            <span style="font-size:.6rem;font-weight:700;color:${tc};letter-spacing:.1em;text-transform:uppercase">${r.team}</span>
+            <span style="font-size:.57rem;color:#a09a92">${tRows.length} events · Total ${fmt$(tTotal)} · Avg ${fmt$(tAvg)}</span>
+          </div>
+        </td>
+      </tr>`;
+    }
+
+    // Format date as M/D
+    let dateStr=r.date;
+    try{const d=parseKey(r.date);dateStr=`${d.getMonth()+1}/${d.getDate()}`;}catch{}
+
+    // Match to calendar event for enrichment
+    // Match to calendar event — only if date AND year both match
+    const calEvt=S.events.find(e=>e.date===r.date&&e.date.slice(0,4)===String(r.year)&&(!r.team||e.team===r.team));
+    const matchup=calEvt?.opponent?`vs ${calEvt.opponent}`:
+      (r.eventTag&&r.eventTag.includes(':'))?r.eventTag.split(':')[1].replace('-',' vs '):
+      r.eventTag||'—';
+    const promotion=calEvt?.promotion||'';
+
+    return seps+`<tr style="border-bottom:.5px solid #e0ddd6;cursor:pointer;transition:background .1s"
+      onmouseover="this.style.background='#faf9f6'" onmouseout="this.style.background=''">
+      <td style="padding:.45rem .75rem;font-size:.7rem;white-space:nowrap;font-weight:500">${dateStr}</td>
       <td style="padding:.45rem .75rem;font-size:.7rem;color:#a09a92" class="hidden sm:table-cell">${r.day||'—'}</td>
       <td style="padding:.45rem .75rem;font-size:.7rem">
-        <span style="font-size:.6rem;font-weight:600;color:${tc};margin-right:.3rem">${r.team||''}</span>
-        <span>${esc(matchup)}</span>
+        <span style="font-weight:500">${esc(matchup)}</span>
+        ${promotion?`<div style="font-size:.58rem;color:#a09a92">${esc(promotion)}</div>`:''}
       </td>
       <td style="padding:.45rem .75rem;font-size:.7rem;text-align:right">${fmtN(r.orders)||'—'}</td>
       <td style="padding:.45rem .75rem;font-size:.7rem;text-align:right;font-weight:600">${fmt$(r.netSales)}</td>
       <td style="padding:.45rem .75rem;font-size:.7rem;text-align:right;color:#6a6460" class="hidden md:table-cell">${fmtN(r.units)||'—'}</td>
       <td style="padding:.45rem .75rem;font-size:.7rem;text-align:right;color:#6a6460" class="hidden md:table-cell">${fmt$(r.aov)}</td>
-      <td style="padding:.45rem .75rem;font-size:.7rem;text-align:right;color:#6a6460" class="hidden lg:table-cell">${fmt$(r.avgBasket)}</td>
+      <td style="padding:.45rem .75rem;font-size:.7rem;text-align:right;color:#6a6460" class="hidden lg:table-cell">${fmtN(r.avgBasket)||'—'}</td>
       <td style="padding:.45rem .75rem" class="no-print">
         <button onclick="deleteHistRow(${HIST.rows.indexOf(r)})"
           style="font-size:.6rem;color:#a09a92;background:none;border:none;cursor:pointer"
@@ -5478,7 +5740,7 @@ function deleteHistRow(idx){
 }
 
 function clearHistoricals(){
-  if(!confirm('Delete all historical data?'))return;
+  if(!confirm('Delete all historical data?\n\nThis cannot be undone.'))return;
   HIST.rows=[];
   save('historicals');
   renderHistoricalsPage();
@@ -5504,8 +5766,9 @@ function importHistoricalsCSV(e){
         if(!date&&!year)return;
 
         const eventTag=(n.eventtag||n.event||n.tag||'').trim();
-        const team=histTeamFromTag(eventTag)||(n.team||'').trim();
-        // Parse opponent from tag: "Timbers:Portland-Seattle" → "Seattle"
+        // Team always derived from eventTag — CSV team column only if tag gives nothing
+        const teamFromTag=histTeamFromTag(eventTag);
+        const team=teamFromTag||(n.team||'').trim();
         let opponent='';
         const tagSplit=eventTag.split(':');
         if(tagSplit.length>1){
@@ -5521,14 +5784,10 @@ function importHistoricalsCSV(e){
         const avgBasket=parseFloat((n.avgbasket||n.averagebasket||'').replace(/[$,]/g,''))||
           (units&&netSales?+(netSales/units).toFixed(2):0);
 
-        // Derive day from date if available
         let day=(n.day||'').trim();
         if(!day&&date){try{day=DAYS_LONG[parseKey(date).getDay()];}catch{}}
-
-        // Derive year from date if not provided
         const finalYear=year||(date?date.slice(0,4):'');
 
-        // Deduplicate by year+date+eventTag
         const key=`${finalYear}|${date||''}|${eventTag}`;
         if(HIST.rows.some(h=>`${h.year}|${h.date||''}|${h.eventTag}`===key))return;
 
@@ -5538,10 +5797,15 @@ function importHistoricalsCSV(e){
       totalAdded+=added;
       pending--;
       if(pending===0){
+        if(totalAdded===0){alert('No valid rows found. Check your CSV matches the template format.');return;}
         save('historicals');
-        setStatus(`${totalAdded} historical rows imported`,'ok');
-        if(S.view==='data') setDataTab('historicals');
-        else renderHistoricalsPage();
+        setStatus(`${totalAdded} historical row${totalAdded!==1?'s':''} imported`,'ok');
+        // Always navigate to Data > Historicals regardless of current view
+        showData();
+        // showData sets DR.activeTab and calls renderDataPage
+        // Force the historicals tab
+        DR.activeTab='historicals';
+        setDataTab('historicals');
       }
     };
     reader.readAsText(file);
