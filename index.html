@@ -5151,34 +5151,51 @@ function clearProductData(){
    iCAL FEED SYNC
 ══════════════════════════════════════════ */
 const IC={
-  feeds:[],      // [{url, name, team, color, lastSync, eventCount}]
+  feeds:[],
   syncTimer:null,
 };
 
-const ICAL_PROXY='https://api.allorigins.win/raw?url=';
-const ICAL_INTERVAL=60*60*1000; // 1 hour
+// Multiple CORS proxies — tried in order until one works
+const ICAL_PROXIES=[
+  url=>`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url=>`https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
+const ICAL_INTERVAL=60*60*1000;
 
-function updateFeedName(idx, name){
+async function fetchWithFallback(url){
+  let lastErr='';
+  for(const proxyFn of ICAL_PROXIES){
+    try{
+      const resp=await fetch(proxyFn(url),{signal:AbortSignal.timeout(12000)});
+      if(!resp.ok){lastErr=`HTTP ${resp.status}`;continue;}
+      const text=await resp.text();
+      if(!text.includes('BEGIN:VCALENDAR')&&!text.includes('BEGIN:VEVENT')){
+        lastErr='Response is not iCal format';continue;
+      }
+      return text;
+    }catch(e){lastErr=e.message;}
+  }
+  throw new Error(lastErr||'All proxies failed');
+}
+
+function updateFeedName(idx,name){
   if(!IC.feeds[idx])return;
   const oldName=IC.feeds[idx].name;
   IC.feeds[idx].name=name.trim()||'Calendar Feed';
-  // Update _feedName on all events from this feed
   S.events.forEach(e=>{if(e._feedName===oldName)e._feedName=IC.feeds[idx].name;});
-  save('icalFeeds');
-  saveEvents();
+  save('icalFeeds');saveEvents();
   renderPlanningList();
   if(_evtActiveTab==='chrono')renderChronoList();
   refreshCalendarEvents();
 }
 
-function updateFeedColor(idx, color){
+function updateFeedColor(idx,color){
   if(!IC.feeds[idx])return;
   const name=IC.feeds[idx].name;
   IC.feeds[idx].color=color;
-  // Update colorHex on all events from this feed
   S.events.forEach(e=>{if(e._feedName===name){e._feedColor=color;e.colorHex=color;}});
-  save('icalFeeds');
-  saveEvents();
+  save('icalFeeds');saveEvents();
   renderIcalFeedsList();
   renderPlanningList();
   if(_evtActiveTab==='chrono')renderChronoList();
@@ -5190,25 +5207,30 @@ function saveIcalFeed(){
   if(!url){setIcalStatus('Please enter a feed URL.');return;}
   if(!url.startsWith('http')){setIcalStatus('URL must start with http:// or https://');return;}
   if(IC.feeds.find(f=>f.url===url)){setIcalStatus('This feed is already added.');return;}
-  // Generate a distinct color for each feed
   const feedColors=['#7a9eb5','#9e7a9e','#c9a84c','#5a9e9e','#c47a8a','#b5956a','#d4856a','#7a9e7e'];
   const color=feedColors[IC.feeds.length%feedColors.length];
-  IC.feeds.push({url,name:'Calendar Feed',team:'',color,lastSync:null,eventCount:0});
+  IC.feeds.push({url,name:'Calendar Feed',team:'',color,lastSync:null,eventCount:0,status:'pending',error:null});
   save('icalFeeds');
   renderIcalFeedsList();
   document.getElementById('ical-url-input').value='';
-  setIcalStatus('Feed added — syncing…');
-  syncIcalFeed(true);
+  setIcalStatus('Feed added — connecting…');
+  syncOneFeed(IC.feeds.length-1);
 }
 
 function removeIcalFeed(idx){
   if(!confirm('Remove this calendar feed?'))return;
+  const feedName=IC.feeds[idx]?.name;
   IC.feeds.splice(idx,1);
-  save('icalFeeds');
-  renderIcalFeedsList();
+  if(feedName){
+    S.events=S.events.filter(e=>e._feedName!==feedName);
+    saveEvents();refreshCalendarEvents();renderPlanningList();
+  }
+  save('icalFeeds');renderIcalFeedsList();updateIcalNavBadge();
   if(!IC.feeds.length){
-    document.getElementById('ical-sync-btn').style.display='none';
-    document.getElementById('ical-status-badge').style.display='none';
+    const sb=document.getElementById('ical-sync-btn');
+    const bb=document.getElementById('ical-status-badge');
+    if(sb)sb.style.display='none';
+    if(bb)bb.style.display='none';
   }
 }
 
@@ -5217,39 +5239,65 @@ function renderIcalFeedsList(){
   if(!el)return;
   const syncBtn=document.getElementById('ical-sync-btn');
   const badge=document.getElementById('ical-status-badge');
-  if(IC.feeds.length){
-    if(syncBtn)syncBtn.style.display='';
-    if(badge)badge.style.display='';
-  }
+  if(IC.feeds.length){if(syncBtn)syncBtn.style.display='';if(badge)badge.style.display='';}
   if(!IC.feeds.length){el.innerHTML='';return;}
   el.innerHTML=IC.feeds.map((f,i)=>{
-    const lastSync=f.lastSync?`Last synced ${timeSince(f.lastSync)}`:'Not yet synced';
-    const evtTxt=f.eventCount?`${f.eventCount} events`:''
+    const lastSync=f.lastSync?`Synced ${timeSince(f.lastSync)}`:'Never synced';
     const color=f.color||'#7a9eb5';
+    const hasError=f.status==='error';
+    const isOk=f.status==='ok';
+    const statusDot=hasError?
+      `<span style="color:#ef4444;font-size:.75rem;flex-shrink:0" title="${f.error||'Sync failed'}">⚠</span>`:
+      isOk?`<span style="color:#1a5c2a;font-size:.75rem;flex-shrink:0" title="Connected">✓</span>`:
+      `<span style="color:#c4bfb7;font-size:.75rem;flex-shrink:0" title="Pending">○</span>`;
     return `<div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .65rem;background:#f5f2ed;border-radius:8px;margin-bottom:.3rem;border-left:3px solid ${color}">
-      <!-- Color swatch — click to change -->
-      <input type="color" value="${color}" title="Change feed color"
+      <input type="color" value="${color}" title="Change color"
         onchange="updateFeedColor(${i},this.value)"
-        style="width:18px;height:18px;border:none;border-radius:3px;cursor:pointer;padding:0;flex-shrink:0;background:none"/>
-      <!-- Editable name -->
-      <input type="text" value="${esc(f.name||'Calendar Feed')}"
-        onchange="updateFeedName(${i},this.value)"
-        onblur="updateFeedName(${i},this.value)"
+        style="width:18px;height:18px;border:none;border-radius:3px;cursor:pointer;padding:0;flex-shrink:0"/>
+      <input type="text" value="${f.name||'Calendar Feed'}"
+        onchange="updateFeedName(${i},this.value)" onblur="updateFeedName(${i},this.value)"
         style="flex:1;border:none;background:transparent;font-size:.68rem;font-weight:600;color:#1a1814;font-family:inherit;outline:none;min-width:0"
         placeholder="Feed name"/>
-      <span style="font-size:.58rem;color:#a09a92;flex-shrink:0">${lastSync}${evtTxt?' · '+evtTxt:''}</span>
-      <button onclick="removeIcalFeed(${i})" style="font-size:.65rem;color:#a09a92;background:none;border:none;cursor:pointer;flex-shrink:0;padding:.1rem .2rem"
-        onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a09a92'">✕</button>
+      ${statusDot}
+      <div style="text-align:right;flex-shrink:0;min-width:4rem">
+        <div style="font-size:.55rem;color:#a09a92">${lastSync}</div>
+        ${f.eventCount?`<div style="font-size:.55rem;color:#1a5c2a;font-weight:600">${f.eventCount} events</div>`:''}
+        ${hasError?`<div style="font-size:.52rem;color:#ef4444;max-width:8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${f.error}">${f.error||'Failed'}</div>`:''}
+      </div>
+      <button onclick="syncOneFeed(${i})" title="Sync now"
+        style="font-size:.7rem;color:#7a9eb5;background:none;border:none;cursor:pointer;padding:.1rem .2rem;flex-shrink:0"
+        onmouseover="this.style.color=\'#1a1814\'" onmouseout="this.style.color=\'#7a9eb5\'">↻</button>
+      <button onclick="removeIcalFeed(${i})"
+        style="font-size:.65rem;color:#a09a92;background:none;border:none;cursor:pointer;padding:.1rem .2rem;flex-shrink:0"
+        onmouseover="this.style.color=\'#ef4444\'" onmouseout="this.style.color=\'#a09a92\'">✕</button>
     </div>`;
   }).join('');
+  updateIcalNavBadge();
+}
+
+function updateIcalNavBadge(){
+  const btns=document.querySelectorAll('[onclick="showPlanning()"]');
+  const hasOk=IC.feeds.some(f=>f.status==='ok');
+  const hasErr=IC.feeds.some(f=>f.status==='error');
+  const hasFeed=IC.feeds.length>0;
+  btns.forEach(btn=>{
+    let dot=btn.querySelector('.ical-nav-dot');
+    if(!dot&&hasFeed){
+      dot=document.createElement('span');
+      dot.className='ical-nav-dot';
+      dot.style.cssText='width:6px;height:6px;border-radius:50%;display:inline-block;margin-left:2px;vertical-align:middle;flex-shrink:0;transition:background .3s';
+      btn.appendChild(dot);
+    }
+    if(dot){
+      dot.style.background=hasErr?'#ef4444':hasOk?'#1a5c2a':'#c9a84c';
+      dot.title=hasErr?'Calendar feed error':hasOk?'Calendar feeds active':'Calendar feed pending';
+    }
+  });
 }
 
 function setIcalStatus(msg,ok){
   const el=document.getElementById('ical-feed-status');
-  if(el){
-    el.textContent=msg;
-    el.style.color=ok?'#166534':ok===false?'#b91c1c':'#a09a92';
-  }
+  if(el){el.textContent=msg;el.style.color=ok===true?'#166534':ok===false?'#b91c1c':'#a09a92';}
 }
 
 function timeSince(isoStr){
@@ -5264,168 +5312,76 @@ function timeSince(isoStr){
   }catch{return '';}
 }
 
-/* Sync one or all feeds */
 function syncIcalFeed(manual=false){
   if(!IC.feeds.length)return;
-  setIcalStatus('Syncing…');
+  setIcalStatus('Syncing all feeds…');
   syncAllFeeds().then(total=>{
-    setIcalStatus(`Synced — ${total} event${total!==1?'s':''} imported`,true);
-  }).catch(e=>{
-    setIcalStatus('Sync failed: '+e.message,false);
-  });
+    setIcalStatus(`Synced — ${total} new event${total!==1?'s':''} imported`,true);
+  }).catch(e=>setIcalStatus('Sync error: '+e.message,false));
+}
+
+async function syncOneFeed(idx){
+  const feed=IC.feeds[idx];if(!feed)return;
+  IC.feeds[idx].status='pending';
+  renderIcalFeedsList();
+  setIcalStatus(`Connecting to "${feed.name}"…`);
+  try{
+    const count=await fetchAndMergeIcal(feed);
+    IC.feeds[idx].lastSync=new Date().toISOString();
+    IC.feeds[idx].eventCount=(IC.feeds[idx].eventCount||0)+count;
+    IC.feeds[idx].status='ok';IC.feeds[idx].error=null;
+    save('icalFeeds');renderIcalFeedsList();
+    setIcalStatus(`"${feed.name}" — ${count} new events imported`,true);
+  }catch(e){
+    IC.feeds[idx].status='error';IC.feeds[idx].error=e.message;
+    save('icalFeeds');renderIcalFeedsList();
+    setIcalStatus(`"${feed.name}" failed: ${e.message}`,false);
+  }
 }
 
 async function syncAllFeeds(){
-  let totalImported=0;
+  let total=0;
   for(let i=0;i<IC.feeds.length;i++){
     try{
       const count=await fetchAndMergeIcal(IC.feeds[i]);
       IC.feeds[i].lastSync=new Date().toISOString();
-      IC.feeds[i].eventCount=count;
-      totalImported+=count;
+      IC.feeds[i].eventCount=(IC.feeds[i].eventCount||0)+count;
+      IC.feeds[i].status='ok';IC.feeds[i].error=null;
+      total+=count;
     }catch(e){
-      console.warn('Feed sync failed:',IC.feeds[i].url,e.message);
+      IC.feeds[i].status='error';IC.feeds[i].error=e.message;
+      console.warn('Feed failed:',IC.feeds[i].name,e.message);
     }
   }
-  save('icalFeeds');
-  renderIcalFeedsList();
-  return totalImported;
+  save('icalFeeds');renderIcalFeedsList();
+  return total;
 }
 
 async function fetchAndMergeIcal(feed){
-  const proxyUrl=ICAL_PROXY+encodeURIComponent(feed.url);
-  const resp=await fetch(proxyUrl);
-  if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
-  const text=await resp.text();
+  const text=await fetchWithFallback(feed.url);
   const events=parseIcal(text);
   if(!events.length)return 0;
-
-  // Merge into S.events — deduplicate by date+subject
-  const existing=new Set(S.events.map(e=>e.date+'|'+e.subject));
+  const existing=new Set(S.events.map(e=>e.date+'|'+(e.subject||'').toLowerCase().trim()));
   let added=0;
   events.forEach(e=>{
-    const k=e.date+'|'+e.subject;
+    const k=e.date+'|'+(e.subject||'').toLowerCase().trim();
     if(!existing.has(k)){
-      // Attach feed identity so we can group, color, and filter by feed
       e._fromIcal=true;
       e._feedName=feed.name||'Calendar Feed';
       e._feedColor=feed.color||'#7a9eb5';
       e.colorHex=feed.color||e.colorHex||'#7a9eb5';
-      S.events.push(e);
-      existing.add(k);
-      added++;
+      S.events.push(e);existing.add(k);added++;
     }
   });
-  if(added>0){
-    saveEvents();
-    refreshCalendarEvents();
-    renderPlanningList();
-  }
+  if(added>0){saveEvents();refreshCalendarEvents();renderPlanningList();}
   return added;
 }
 
-/* Parse .ics text into our event format */
-function parseIcal(text){
-  const events=[];
-  const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
-    // Unfold continuation lines
-    .replace(/\n[ \t]/g,'')
-    .split('\n');
-
-  let inEvent=false,cur={};
-  lines.forEach(line=>{
-    if(line==='BEGIN:VEVENT'){inEvent=true;cur={};return;}
-    if(line==='END:VEVENT'){
-      if(inEvent){
-        const evt=icalEventToAppEvent(cur);
-        if(evt)events.push(evt);
-      }
-      inEvent=false;cur={};return;
-    }
-    if(!inEvent)return;
-    const colon=line.indexOf(':');
-    if(colon<0)return;
-    const key=line.slice(0,colon).split(';')[0].toUpperCase();
-    const val=line.slice(colon+1).trim();
-    cur[key]=val;
-  });
-  return events;
-}
-
-function icalEventToAppEvent(raw){
-  try{
-    // Parse date from DTSTART (handles DATE and DATETIME formats)
-    const dtstart=raw.DTSTART||raw['DTSTART;VALUE=DATE']||'';
-    const dateStr=dtstart.replace(/T.*$/,'').replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3');
-    if(!dateStr||!/^\d{4}-\d{2}-\d{2}$/.test(dateStr))return null;
-
-    const d=parseKey(dateStr);
-    const day=DAYS_LONG[d.getDay()];
-
-    const summary=(raw.SUMMARY||'').replace(/\\,/g,',').replace(/\\n/g,' ');
-    const desc=(raw.DESCRIPTION||'').replace(/\\,/g,',').replace(/\\n/g,'\n');
-    const location=(raw.LOCATION||'').replace(/\\,/g,',');
-
-    // Try to detect team from summary/description
-    let team='',opponent='',promotion='';
-    const upper=summary.toUpperCase();
-    if(upper.includes('THORNS'))team='Thorns';
-    else if(upper.includes('TIMBERS'))team='Timbers';
-
-    // Try to parse "Team vs Opponent" pattern
-    const vsMatch=summary.match(/(.+?)\s+vs\.?\s+(.+)/i);
-    if(vsMatch){
-      team=team||vsMatch[1].trim();
-      opponent=vsMatch[2].trim();
-    }
-
-    // Parse time from DTSTART if it has a time component
-    let kickoff='',kickoffHour=null;
-    if(dtstart.includes('T')){
-      const timePart=dtstart.replace(/^.*T/,'').replace(/Z$/,'');
-      if(timePart.length>=4){
-        let h=parseInt(timePart.slice(0,2));
-        const m=timePart.slice(2,4);
-        const ampm=h>=12?'PM':'AM';
-        if(h>12)h-=12;
-        if(h===0)h=12;
-        kickoff=`${h}:${m} ${ampm}`;
-        kickoffHour=parseInt(dtstart.slice(dtstart.indexOf('T')+1,dtstart.indexOf('T')+3));
-      }
-    }
-
-    const color=resolveColor('',team);
-    const subject=opponent?`${team} vs ${opponent}`:(promotion||summary||team);
-
-    return{
-      date:dateStr,
-      day,
-      team:team||summary,
-      opponent,
-      promotion:promotion||location,
-      initiative:desc.split('\n')[0].slice(0,80),
-      callTime:'',callHour:null,
-      gates:'',gatesHour:null,
-      kickoff,kickoffHour,
-      subject,
-      colorHex:color,
-      _fromIcal:true,
-    };
-  }catch(e){
-    console.warn('ical event parse error:',e);
-    return null;
-  }
-}
-
-/* Start hourly auto-sync */
 function startIcalAutoSync(){
   if(IC.syncTimer)clearInterval(IC.syncTimer);
   if(!IC.feeds.length)return;
   IC.syncTimer=setInterval(()=>{
-    if(IC.feeds.length){
-      console.log('iCal auto-sync…');
-      syncAllFeeds().catch(console.warn);
-    }
+    if(IC.feeds.length)syncAllFeeds().catch(console.warn);
   },ICAL_INTERVAL);
 }
 
