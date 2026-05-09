@@ -1013,12 +1013,32 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
           <div id="ical-feed-status" style="margin-top:.4rem;font-size:.65rem;color:#a09a92;min-height:1rem"></div>
           <!-- Format tip — shown when connection fails -->
           <div id="ical-url-tip" style="display:none;margin-top:.5rem;background:#fef9ec;border:1px solid #f0d98a;border-radius:8px;padding:.6rem .75rem">
-            <p style="font-size:.65rem;font-weight:600;color:#92400e;margin-bottom:.3rem">📅 How to get the right link:</p>
-            <p style="font-size:.62rem;color:#92400e;margin-bottom:.2rem"><strong>Google Calendar:</strong> Open calendar → ⋮ → Settings → "Secret address in iCal format" → copy that URL</p>
-            <p style="font-size:.62rem;color:#92400e;margin-bottom:.2rem"><strong>Apple iCloud:</strong> Calendar app → Share → "Public Calendar" → copy the webcal:// link</p>
-            <p style="font-size:.62rem;color:#92400e;margin-bottom:.2rem"><strong>Outlook:</strong> Settings → Calendar → Shared calendars → "Publish a calendar" → ICS link</p>
-            <p style="font-size:.62rem;color:#92400e">The URL should end in <code style="background:#fde68a;padding:0 3px;border-radius:2px">.ics</code> or contain <code style="background:#fde68a;padding:0 3px;border-radius:2px">ical</code></p>
+            <p style="font-size:.65rem;font-weight:600;color:#92400e;margin-bottom:.3rem">📅 How to get the right iCal link:</p>
+            <p style="font-size:.62rem;color:#92400e;margin-bottom:.2rem"><strong>Google Calendar:</strong> Calendar Settings → scroll to "Secret address in iCal format" → copy that URL (works without login)</p>
+            <p style="font-size:.62rem;color:#92400e;margin-bottom:.2rem"><strong>Apple iCloud:</strong> Calendar → Share → enable "Public Calendar" → copy the webcal:// link</p>
+            <p style="font-size:.62rem;color:#92400e;margin-bottom:.4rem"><strong>Outlook:</strong> Settings → Calendar → "Publish a calendar" → copy ICS link</p>
+            <p style="font-size:.62rem;color:#6B7280"><em>Or use "Connect Google Calendar" below to link any calendar without needing a URL.</em></p>
           </div>
+
+          <!-- Google Calendar API connect -->
+          <div style="margin-top:.75rem;padding:.65rem .75rem;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
+              <div>
+                <div style="font-size:.65rem;font-weight:700;color:#1e3a8a;margin-bottom:.15rem">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:3px"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg>
+                  Connect Google Calendar
+                </div>
+                <div style="font-size:.6rem;color:#3b82f6">Link any shared or private Google Calendar directly — no URL needed</div>
+              </div>
+              <button onclick="connectGoogleCalendar()" id="gcal-connect-btn"
+                style="padding:.35rem .85rem;border-radius:7px;background:#1d4ed8;color:#fff;font-size:.7rem;font-weight:600;border:none;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                Connect
+              </button>
+            </div>
+            <div id="gcal-calendars" style="margin-top:.5rem"></div>
+            <div id="gcal-status" style="font-size:.62rem;color:#3b82f6;margin-top:.25rem;min-height:.8rem"></div>
+          </div>
+
           <div id="ical-feeds-list" style="margin-top:.5rem"></div>
         </div>
 
@@ -5403,16 +5423,26 @@ function syncIcalFeed(manual=false){
 
 async function syncOneFeed(idx){
   const feed=IC.feeds[idx];if(!feed)return;
-  IC.feeds[idx].status='pending';
-  renderIcalFeedsList();
+  IC.feeds[idx].status='pending';renderIcalFeedsList();
   setIcalStatus(`Connecting to "${feed.name}"…`);
   try{
-    const count=await fetchAndMergeIcal(feed);
-    IC.feeds[idx].lastSync=new Date().toISOString();
-    IC.feeds[idx].eventCount=(IC.feeds[idx].eventCount||0)+count;
-    IC.feeds[idx].status='ok';IC.feeds[idx].error=null;
-    save('icalFeeds');renderIcalFeedsList();
-    setIcalStatus(`"${feed.name}" — ${count} new events imported`,true);
+    let count;
+    if(feed.gcalId){
+      // Google Calendar API feed
+      if(!_gcalToken){
+        setIcalStatus(`"${feed.name}" needs reconnection — click Connect Google Calendar`,false);
+        IC.feeds[idx].status='error';IC.feeds[idx].error='Token expired — reconnect';
+        save('icalFeeds');renderIcalFeedsList();return;
+      }
+      count=await syncGcalFeed(idx);
+    } else {
+      count=await fetchAndMergeIcal(feed);
+      IC.feeds[idx].lastSync=new Date().toISOString();
+      IC.feeds[idx].eventCount=(IC.feeds[idx].eventCount||0)+count;
+      IC.feeds[idx].status='ok';IC.feeds[idx].error=null;
+      save('icalFeeds');renderIcalFeedsList();
+    }
+    setIcalStatus(`"${feed.name}" — ${count} events imported`,true);
   }catch(e){
     IC.feeds[idx].status='error';IC.feeds[idx].error=e.message;
     save('icalFeeds');renderIcalFeedsList();
@@ -5424,11 +5454,17 @@ async function syncAllFeeds(){
   let total=0;
   for(let i=0;i<IC.feeds.length;i++){
     try{
-      const count=await fetchAndMergeIcal(IC.feeds[i]);
-      IC.feeds[i].lastSync=new Date().toISOString();
-      IC.feeds[i].eventCount=(IC.feeds[i].eventCount||0)+count;
-      IC.feeds[i].status='ok';IC.feeds[i].error=null;
-      total+=count;
+      let count;
+      if(IC.feeds[i].gcalId){
+        if(_gcalToken){count=await syncGcalFeed(i);}
+        else{IC.feeds[i].status='error';IC.feeds[i].error='Reconnect Google Calendar';count=0;}
+      } else {
+        count=await fetchAndMergeIcal(IC.feeds[i]);
+        IC.feeds[i].lastSync=new Date().toISOString();
+        IC.feeds[i].eventCount=(IC.feeds[i].eventCount||0)+count;
+        IC.feeds[i].status='ok';IC.feeds[i].error=null;
+      }
+      total+=count||0;
     }catch(e){
       IC.feeds[i].status='error';IC.feeds[i].error=e.message;
       console.warn('Feed failed:',IC.feeds[i].name,e.message);
@@ -6988,6 +7024,190 @@ function resetEvtGroupColor(){
   renderPlanningList();
   if(_evtActiveTab==='chrono')renderChronoList();
   refreshCalendarEvents();
+}
+
+/* ══════════════════════════════════════════
+   GOOGLE CALENDAR API INTEGRATION
+   Uses the user's existing Google sign-in
+   to access any calendar they have access to
+══════════════════════════════════════════ */
+let _gcalToken=null; // stores the OAuth access token
+
+function setGcalStatus(msg,color){
+  const el=document.getElementById('gcal-status');
+  if(el){el.textContent=msg;el.style.color=color||'#3b82f6';}
+}
+
+async function connectGoogleCalendar(){
+  setGcalStatus('Requesting calendar access…');
+  document.getElementById('gcal-connect-btn').disabled=true;
+  try{
+    const provider=new firebase.auth.GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
+    provider.setCustomParameters({prompt:'select_account'});
+    const result=await S.auth.signInWithPopup(provider);
+    _gcalToken=result.credential.accessToken;
+    setGcalStatus('Connected! Loading your calendars…','#166534');
+    await loadGoogleCalendarList();
+  }catch(e){
+    setGcalStatus('Connection failed: '+e.message,'#b91c1c');
+    document.getElementById('gcal-connect-btn').disabled=false;
+  }
+}
+
+async function loadGoogleCalendarList(){
+  if(!_gcalToken){setGcalStatus('Not connected','#b91c1c');return;}
+  try{
+    const resp=await fetch(
+      'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50',
+      {headers:{Authorization:'Bearer '+_gcalToken}}
+    );
+    if(!resp.ok){
+      if(resp.status===401){_gcalToken=null;setGcalStatus('Session expired — click Connect again','#b91c1c');}
+      else setGcalStatus('Error loading calendars: HTTP '+resp.status,'#b91c1c');
+      return;
+    }
+    const data=await resp.json();
+    const calendars=(data.items||[]).sort((a,b)=>{
+      if(a.primary)return-1;if(b.primary)return 1;
+      return a.summary.localeCompare(b.summary);
+    });
+    renderGcalList(calendars);
+    setGcalStatus(`Found ${calendars.length} calendar${calendars.length!==1?'s':''}. Click one to add it.`,'#166534');
+    document.getElementById('gcal-connect-btn').textContent='Reconnect';
+    document.getElementById('gcal-connect-btn').disabled=false;
+  }catch(e){
+    setGcalStatus('Failed to load calendars: '+e.message,'#b91c1c');
+    document.getElementById('gcal-connect-btn').disabled=false;
+  }
+}
+
+function renderGcalList(calendars){
+  const el=document.getElementById('gcal-calendars');
+  if(!el)return;
+  el.innerHTML=`<div style="display:flex;flex-direction:column;gap:.3rem;margin-top:.4rem;max-height:200px;overflow-y:auto">
+    ${calendars.map(cal=>{
+      const alreadyAdded=IC.feeds.some(f=>f.gcalId===cal.id);
+      const color=cal.backgroundColor||'#7a9eb5';
+      return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem .5rem;background:#fff;border-radius:6px;border:1px solid #e0ddd6">
+        <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></div>
+        <div style="flex:1;font-size:.68rem;font-weight:500;color:#1a1814;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          ${esc(cal.summary||'Unnamed')}${cal.primary?' <span style="font-size:.55rem;color:#a09a92">(primary)</span>':''}
+        </div>
+        <button onclick="addGcalFeed('${cal.id}','${esc(cal.summary||'Calendar')}','${color}')"
+          ${alreadyAdded?'disabled':''}
+          style="padding:.2rem .55rem;border-radius:5px;font-size:.65rem;font-weight:600;border:none;cursor:${alreadyAdded?'default':'pointer'};
+            background:${alreadyAdded?'#e0ddd6':'#1a1814'};color:${alreadyAdded?'#a09a92':'#fff'};flex-shrink:0;white-space:nowrap">
+          ${alreadyAdded?'Added':'+ Add'}
+        </button>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+async function addGcalFeed(calId, name, color){
+  if(!_gcalToken){setGcalStatus('Session expired — reconnect','#b91c1c');return;}
+  setGcalStatus(`Adding "${name}"…`);
+  // Store as a special gcal feed (no URL — uses API)
+  const feedColors=['#7a9eb5','#9e7a9e','#c9a84c','#5a9e9e','#c47a8a','#b5956a'];
+  const feedColor=color||feedColors[IC.feeds.length%feedColors.length];
+  IC.feeds.push({
+    url:'gcal://'+calId,  // special protocol marker
+    gcalId:calId,
+    name,
+    team:'',
+    color:feedColor,
+    lastSync:null,
+    eventCount:0,
+    status:'pending',
+    error:null,
+  });
+  save('icalFeeds');
+  renderIcalFeedsList();
+  // Sync immediately
+  const idx=IC.feeds.length-1;
+  await syncGcalFeed(idx);
+  // Reload calendar list to show Updated state
+  await loadGoogleCalendarList();
+}
+
+async function syncGcalFeed(idx){
+  const feed=IC.feeds[idx];
+  if(!feed||!feed.gcalId)return 0;
+  if(!_gcalToken){
+    IC.feeds[idx].status='error';IC.feeds[idx].error='Not authenticated — click Reconnect';
+    save('icalFeeds');renderIcalFeedsList();return 0;
+  }
+  const calId=feed.gcalId;
+  // Fetch events for next 12 months
+  const now=new Date();
+  const future=new Date(now.getFullYear()+1,now.getMonth(),now.getDate());
+  const past=new Date(now.getFullYear()-1,now.getMonth(),now.getDate());
+  const url=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`+
+    `?maxResults=250&singleEvents=true&orderBy=startTime`+
+    `&timeMin=${past.toISOString()}&timeMax=${future.toISOString()}`;
+  try{
+    const resp=await fetch(url,{headers:{Authorization:'Bearer '+_gcalToken}});
+    if(!resp.ok){
+      if(resp.status===401)_gcalToken=null;
+      throw new Error('HTTP '+resp.status+(resp.status===401?' — reconnect Google Calendar':''));
+    }
+    const data=await resp.json();
+    const events=(data.items||[]).map(item=>gcalItemToAppEvent(item,feed));
+    // Remove old events from this feed
+    S.events=S.events.filter(e=>e._feedName!==feed.name);
+    events.filter(Boolean).forEach(e=>S.events.push(e));
+    IC.feeds[idx].lastSync=new Date().toISOString();
+    IC.feeds[idx].eventCount=events.length;
+    IC.feeds[idx].status='ok';IC.feeds[idx].error=null;
+    save('icalFeeds');saveEvents();
+    refreshCalendarEvents();renderPlanningList();
+    if(_evtActiveTab==='chrono')renderChronoList();
+    renderIcalFeedsList();
+    return events.length;
+  }catch(e){
+    IC.feeds[idx].status='error';IC.feeds[idx].error=e.message;
+    save('icalFeeds');renderIcalFeedsList();
+    throw e;
+  }
+}
+
+function gcalItemToAppEvent(item,feed){
+  try{
+    const start=item.start?.date||item.start?.dateTime||'';
+    if(!start)return null;
+    const dateStr=start.slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dateStr))return null;
+    const d=parseKey(dateStr);
+    const summary=item.summary||'';
+    const description=item.description||'';
+    const location=item.location||'';
+    let team='',opponent='';
+    const upper=summary.toUpperCase();
+    if(upper.includes('THORNS'))team='Thorns';
+    else if(upper.includes('TIMBERS'))team='Timbers';
+    const vsMatch=summary.match(/(.+?)\s+(?:vs?\.?|@)\s+(.+)/i);
+    if(vsMatch){team=team||vsMatch[1].trim();opponent=vsMatch[2].trim();}
+    let kickoff='';
+    if(item.start?.dateTime){
+      const t=new Date(item.start.dateTime);
+      let h=t.getHours(),m=t.getMinutes();
+      const ampm=h>=12?'PM':'AM';
+      if(h>12)h-=12;if(h===0)h=12;
+      kickoff=`${h}:${String(m).padStart(2,'0')} ${ampm}`;
+    }
+    return{
+      date:dateStr,day:DAYS_LONG[d.getDay()],
+      team:team||feed.name,opponent,
+      promotion:location,initiative:description.slice(0,80),
+      callTime:'',callHour:null,gates:'',gatesHour:null,
+      kickoff,kickoffHour:null,
+      subject:opponent?`${team} vs ${opponent}`:(summary||feed.name),
+      colorHex:feed.color||'#7a9eb5',
+      _fromIcal:true,_feedName:feed.name,_feedColor:feed.color,
+      _gcalEventId:item.id,
+    };
+  }catch{return null;}
 }
 
 window.addEventListener('DOMContentLoaded',initFirebase);
