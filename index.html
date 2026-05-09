@@ -1439,7 +1439,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
   <section id="catalog-view" style="display:none;min-height:100vh">
 
     <!-- Sticky category tabs + team filter -->
-    <div id="cat-tabs-bar" style="position:sticky;top:52px;z-index:9;background:#fff;border-bottom:1px solid #e0ddd6;padding:0 1rem">
+    <div id="cat-tabs-bar" style="position:sticky;top:52px;z-index:9;background:#fff;border-bottom:1px solid #e0ddd6;padding:0 1rem;display:none">
       <div style="display:flex;align-items:center;gap:.25rem;overflow-x:auto;padding:.5rem 0;-webkit-overflow-scrolling:touch">
         <div style="display:flex;gap:.4rem;flex-shrink:0" id="cat-tabs"></div>
         <div style="flex:1;min-width:.5rem"></div>
@@ -2024,7 +2024,8 @@ function goToday(){navigateTo(new Date());}
 
 function showHome(){
   document.body.dataset.view='home';
-  if(S.view==='daily'){clearTimeout(S.saveTimer);doSave();}
+
+  document.getElementById('cat-tabs-bar').style.display='none';  if(S.view==='daily'){clearTimeout(S.saveTimer);doSave();}
   if(S.listener){S.listener();S.listener=null;}
   S.view='home';
   document.getElementById('home-view').style.display='';
@@ -2038,7 +2039,8 @@ function showHome(){
 
 function showDaily(){
   document.body.dataset.view='daily';
-  S.view='daily';
+
+  document.getElementById('cat-tabs-bar').style.display='none';  S.view='daily';
   document.getElementById('home-view').style.display='none';
   document.getElementById('daily-view').style.display='';
   document.getElementById('month-view').style.display='none';
@@ -2115,7 +2117,8 @@ function showMonth(y,m){
   S.monthYear=y;S.monthMonth=m;
   S.view='month';
   document.body.dataset.view='month';
-  document.getElementById('home-view').style.display='none';
+
+  document.getElementById('cat-tabs-bar').style.display='none';  document.getElementById('home-view').style.display='none';
   document.getElementById('daily-view').style.display='none';
   document.getElementById('month-view').style.display='block';
   document.getElementById('planning-view').style.display='none';
@@ -3406,7 +3409,8 @@ function showPlanning(){
   if(S.listener){S.listener();S.listener=null;}
   S.view='planning';
   document.body.dataset.view='planning';
-  document.getElementById('home-view').style.display='none';
+
+  document.getElementById('cat-tabs-bar').style.display='none';  document.getElementById('home-view').style.display='none';
   document.getElementById('daily-view').style.display='none';
   document.getElementById('month-view').style.display='none';
   document.getElementById('planning-view').style.display='block';
@@ -3421,7 +3425,8 @@ function showProjects(){
   if(S.listener){S.listener();S.listener=null;}
   S.view='projects';
   document.body.dataset.view='projects';
-  document.getElementById('home-view').style.display='none';
+
+  document.getElementById('cat-tabs-bar').style.display='none';  document.getElementById('home-view').style.display='none';
   document.getElementById('daily-view').style.display='none';
   document.getElementById('month-view').style.display='none';
   document.getElementById('planning-view').style.display='none';
@@ -4469,7 +4474,8 @@ function showData(){
   if(S.listener){S.listener();S.listener=null;}
   S.view='data';
   document.body.dataset.view='data';
-  ['home-view','daily-view','month-view','planning-view','projects-view'].forEach(id=>{
+
+  document.getElementById('cat-tabs-bar').style.display='none';  ['home-view','daily-view','month-view','planning-view','projects-view'].forEach(id=>{
     document.getElementById(id).style.display='none';
   });
   document.getElementById('data-view').style.display='block';
@@ -6119,6 +6125,7 @@ function showCatalog(){
   ['home-view','daily-view','month-view','planning-view','projects-view','data-view']
     .forEach(id=>document.getElementById(id).style.display='none');
   document.getElementById('catalog-view').style.display='';
+  document.getElementById('cat-tabs-bar').style.display='';
   catLoad();
   renderCatalogTabs();
   renderCatalogTeamPills();
