@@ -3885,6 +3885,8 @@ function openBoard(boardId){
   KS.filterTag=null;
   const pf=document.getElementById('proj-priority-filter');
   if(pf)pf.value='';
+  const board=activeBoard();
+  if(!board)return;
   document.getElementById('proj-home').style.display='none';
   document.getElementById('proj-board').style.display='';
   document.getElementById('board-label').textContent=board.name;
