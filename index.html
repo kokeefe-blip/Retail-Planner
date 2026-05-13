@@ -3663,13 +3663,16 @@ function renderBoardGrid(){
   // Then sort columns and boards within each column
   let boards=[...KS.boards];
 
-  if(KS.boardSort==='name'){
-    // Name sort: single column sorted A-Z
-    boards.sort((a,b)=>a.name.localeCompare(b.name));
+  if(KS.boardSort==='name'||KS.boardSort==='manual-ordered'){
+    if(KS.boardSort==='name')boards.sort((a,b)=>a.name.localeCompare(b.name));
+    // manual-ordered: boards already in KS.boards order
     const col=document.createElement('div');
     col.style.cssText='display:flex;flex-direction:column;gap:.75rem;min-width:260px;flex:1;max-width:320px';
-    boards.forEach(board=>col.appendChild(buildBoardCard(board,today)));
-    // Add board button at bottom of single column
+    boards.forEach(board=>{
+      const card=buildBoardCard(board,today);
+      initBoardCardDrag(card,board.id,col);
+      col.appendChild(card);
+    });
     col.appendChild(buildAddBoardBtn());
     grid.appendChild(col);
     return;
@@ -3709,7 +3712,11 @@ function renderBoardGrid(){
     colHeader.innerHTML=`<span style="font-size:.55rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:${colData.color}">Group ${ci+1}</span>`;
     colEl.appendChild(colHeader);
 
-    colData.boards.forEach(board=>colEl.appendChild(buildBoardCard(board,today)));
+    colData.boards.forEach(board=>{
+      const card=buildBoardCard(board,today);
+      initBoardCardDrag(card,board.id,colEl);
+      colEl.appendChild(card);
+    });
     grid.appendChild(colEl);
   });
 
@@ -3754,6 +3761,57 @@ function getTopTasks(boardId, today, n=3){
   });
 
   return parsed.slice(0,n);
+}
+
+/* ── Board home drag-to-reorder ── */
+let _boardDragId=null;
+let _boardDragColEl=null;
+
+function initBoardCardDrag(cardEl, boardId, colEl){
+  cardEl.draggable=true;
+
+  cardEl.addEventListener('dragstart',e=>{
+    _boardDragId=boardId;
+    _boardDragColEl=colEl;
+    cardEl.classList.add('dragging');
+    e.dataTransfer.effectAllowed='move';
+    e.dataTransfer.setData('text/plain',boardId);
+  });
+
+  cardEl.addEventListener('dragend',()=>{
+    cardEl.classList.remove('dragging');
+    colEl.querySelectorAll('.board-card').forEach(c=>c.classList.remove('drag-over'));
+    _boardDragId=null;_boardDragColEl=null;
+  });
+
+  cardEl.addEventListener('dragover',e=>{
+    e.preventDefault();e.dataTransfer.dropEffect='move';
+    if(_boardDragId&&_boardDragId!==boardId&&_boardDragColEl===colEl){
+      colEl.querySelectorAll('.board-card').forEach(c=>c.classList.remove('drag-over'));
+      cardEl.classList.add('drag-over');
+    }
+  });
+
+  cardEl.addEventListener('dragleave',()=>cardEl.classList.remove('drag-over'));
+
+  cardEl.addEventListener('drop',e=>{
+    e.preventDefault();
+    cardEl.classList.remove('drag-over');
+    if(!_boardDragId||_boardDragId===boardId||_boardDragColEl!==colEl)return;
+
+    // Reorder KS.boards: move dragged board before the drop target
+    const dragIdx=KS.boards.findIndex(b=>b.id===_boardDragId);
+    const dropIdx=KS.boards.findIndex(b=>b.id===boardId);
+    if(dragIdx<0||dropIdx<0)return;
+    const [moved]=KS.boards.splice(dragIdx,1);
+    const newDropIdx=KS.boards.findIndex(b=>b.id===boardId);
+    KS.boards.splice(newDropIdx,0,moved);
+
+    // Switch to manual sort so the user's order is preserved
+    KS.boardSort='manual-ordered';
+    kbSave();
+    renderBoardGrid();
+  });
 }
 
 function buildBoardCard(board, today){
