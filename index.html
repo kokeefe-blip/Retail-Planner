@@ -3665,9 +3665,8 @@ function renderBoardGrid(){
   // Then sort columns and boards within each column
   let boards=[...KS.boards];
 
-  if(KS.boardSort==='name'||KS.boardSort==='manual-ordered'){
-    if(KS.boardSort==='name')boards.sort((a,b)=>a.name.localeCompare(b.name));
-    // manual-ordered: boards already in KS.boards order
+  if(KS.boardSort==='name'){
+    boards.sort((a,b)=>a.name.localeCompare(b.name));
     const col=document.createElement('div');
     col.style.cssText='display:flex;flex-direction:column;gap:.75rem;min-width:260px;flex:1;max-width:320px';
     boards.forEach(board=>{
@@ -3680,29 +3679,18 @@ function renderBoardGrid(){
     return;
   }
 
-  // Color sort: group by hue, each color = one vertical column
-  // Sort boards within each color by most urgent due date
+  // Color sort: group by hue into vertical columns
+  // Order within each column = order in KS.boards (user can drag to reorder)
   const colorGroups={};
   boards.forEach(board=>{
-    const hue=Math.round(hexToHue(board.color)/30)*30; // bucket into 30-degree hue ranges
+    const hue=Math.round(hexToHue(board.color)/30)*30;
     if(!colorGroups[hue])colorGroups[hue]={hue,color:board.color,boards:[]};
     colorGroups[hue].boards.push(board);
+    // NOTE: no auto-sort here — preserve KS.boards order within each color group
   });
 
-  // Sort columns by hue
+  // Sort columns left-to-right by hue (column order stays automatic)
   const columns=Object.values(colorGroups).sort((a,b)=>a.hue-b.hue);
-
-  // Within each column, sort boards by most urgent due date (soonest first, no-date last)
-  columns.forEach(col=>{
-    col.boards.sort((a,b)=>{
-      const na=boardNextDue(a.id);
-      const nb=boardNextDue(b.id);
-      if(!na&&!nb)return a.name.localeCompare(b.name);
-      if(!na)return 1;
-      if(!nb)return -1;
-      return na.d-nb.d;
-    });
-  });
 
   columns.forEach((colData,ci)=>{
     const colEl=document.createElement('div');
@@ -3801,16 +3789,23 @@ function initBoardCardDrag(cardEl, boardId, colEl){
     cardEl.classList.remove('drag-over');
     if(!_boardDragId||_boardDragId===boardId||_boardDragColEl!==colEl)return;
 
-    // Reorder KS.boards: move dragged board before the drop target
+    // Move dragged board to be directly before the drop target in KS.boards
+    // This preserves color grouping — only reorders within the same column
     const dragIdx=KS.boards.findIndex(b=>b.id===_boardDragId);
     const dropIdx=KS.boards.findIndex(b=>b.id===boardId);
     if(dragIdx<0||dropIdx<0)return;
+
+    // Determine if we're inserting before or after based on visual position
+    const draggedCard=colEl.querySelector(`[data-board-id="${_boardDragId}"]`);
+    const dropCard=cardEl;
+    const draggedRect=draggedCard?draggedCard.getBoundingClientRect():{top:0};
+    const dropRect=dropCard.getBoundingClientRect();
+    const insertBefore=draggedRect.top>dropRect.top;
+
     const [moved]=KS.boards.splice(dragIdx,1);
     const newDropIdx=KS.boards.findIndex(b=>b.id===boardId);
-    KS.boards.splice(newDropIdx,0,moved);
+    KS.boards.splice(insertBefore?newDropIdx:newDropIdx+1,0,moved);
 
-    // Switch to manual sort so the user's order is preserved
-    KS.boardSort='manual-ordered';
     kbSave();
     renderBoardGrid();
   });
