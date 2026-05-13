@@ -1807,35 +1807,40 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
         <input id="pf-tags" type="text" placeholder="comma, separated, tags…" class="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-800 outline-none focus:border-stone-400 transition" style="font-family:inherit"/>
       </div>
 
-      <!-- Notes -->
+      <!-- Freeform Canvas -->
       <div>
-        <label class="section-label block mb-1">Notes</label>
-        <textarea id="pf-notes" rows="4" placeholder="Notes, links, details…" class="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-800 outline-none focus:border-stone-400 transition" style="font-family:inherit;resize:vertical"></textarea>
-      </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
+          <label class="section-label">Canvas</label>
+          <span style="font-size:.58rem;color:#c4bfb7">click any block to edit</span>
+        </div>
 
-      <!-- Files -->
-      <div>
-        <label class="section-label block mb-1">Files & Documents</label>
-        <label class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs text-stone-500 font-semibold cursor-pointer hover:bg-stone-50 transition w-full justify-center" style="-webkit-tap-highlight-color:transparent">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Upload Files (PDF, images, docs)
-          <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp" multiple class="hidden" onchange="handleProjectFiles(event)"/>
-        </label>
-        <div id="pf-files-list" style="margin-top:.5rem;display:flex;flex-direction:column;gap:.3rem"></div>
-        <div id="pf-files-uploading" style="display:none;font-size:.65rem;color:#a09a92;margin-top:.3rem">Uploading…</div>
-      </div>
+        <!-- Canvas blocks container -->
+        <div id="pf-canvas" style="min-height:80px;border:1px solid #e0ddd6;border-radius:10px;padding:.5rem;background:#faf9f6;display:flex;flex-direction:column;gap:.35rem">
+          <!-- Blocks rendered here by JS -->
+        </div>
 
-      <!-- Image upload -->
-      <div>
-        <label class="section-label block mb-1">Image</label>
-        <div id="pf-img-wrap" class="flex items-center gap-3">
-          <label class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs text-stone-500 font-semibold cursor-pointer hover:bg-stone-50 transition" style="-webkit-tap-highlight-color:transparent">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-            Upload Image
-            <input type="file" accept="image/*" class="hidden" onchange="handleProjectImage(event)"/>
+        <!-- Add toolbar -->
+        <div style="display:flex;gap:.4rem;margin-top:.4rem;flex-wrap:wrap">
+          <button onclick="canvasAddText()" type="button"
+            style="display:flex;align-items:center;gap:.3rem;padding:.3rem .65rem;border-radius:6px;border:1px dashed #c4bfb7;background:transparent;font-size:.68rem;font-weight:600;color:#a09a92;cursor:pointer;transition:all .12s"
+            onmouseover="this.style.borderColor='#1a1814';this.style.color='#1a1814'" onmouseout="this.style.borderColor='#c4bfb7';this.style.color='#a09a92'">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Text
+          </button>
+          <label style="display:flex;align-items:center;gap:.3rem;padding:.3rem .65rem;border-radius:6px;border:1px dashed #c4bfb7;background:transparent;font-size:.68rem;font-weight:600;color:#a09a92;cursor:pointer;transition:all .12s"
+            onmouseover="this.style.borderColor='#1a1814';this.style.color='#1a1814'" onmouseout="this.style.borderColor='#c4bfb7';this.style.color='#a09a92'">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Image
+            <input type="file" accept="image/*" multiple class="hidden" onchange="canvasAddImages(event)"/>
           </label>
-          <img id="pf-img-preview" src="" alt="" style="display:none;width:3rem;height:3rem;object-fit:cover;border-radius:6px;border:0.5px solid #e0ddd6"/>
-          <button id="pf-img-clear" onclick="clearProjectImage()" style="display:none;font-size:.65rem;color:#a09a92;background:none;border:none;cursor:pointer">Remove</button>
+          <label style="display:flex;align-items:center;gap:.3rem;padding:.3rem .65rem;border-radius:6px;border:1px dashed #c4bfb7;background:transparent;font-size:.68rem;font-weight:600;color:#a09a92;cursor:pointer;transition:all .12s"
+            onmouseover="this.style.borderColor='#1a1814';this.style.color='#1a1814'" onmouseout="this.style.borderColor='#c4bfb7';this.style.color='#a09a92'">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>File
+            <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.pptx" multiple class="hidden" onchange="canvasAddFiles(event)"/>
+          </label>
+          <div id="pf-canvas-uploading" style="display:none;font-size:.63rem;color:#a09a92;align-items:center;gap:.3rem">
+            <div class="load-dot" style="animation-delay:0s"></div>
+            <div class="load-dot" style="animation-delay:.2s"></div>
+            <span>Uploading…</span>
+          </div>
         </div>
       </div>
 
@@ -4139,8 +4144,18 @@ function openProjectModal(cardId,defaultColId){
 
   const card=cardId?KS.cards.find(c=>c.id===cardId):null;
   KS.editCardId=cardId||null;
-  _modalImgData=card?card.imgData||'':'';
-  _modalFiles=card&&card.files?[...card.files]:[];
+  _modalImgData='';
+  _modalFiles=[];
+
+  // Build canvas from card data — migrate legacy notes/image/files if no canvas yet
+  if(card&&card.canvas){
+    _canvas=JSON.parse(JSON.stringify(card.canvas));
+  } else {
+    _canvas=[];
+    if(card&&card.notes)_canvas.push({id:uid(),type:'text',content:card.notes});
+    if(card&&card.imgData)_canvas.push({id:uid(),type:'image',url:card.imgData,name:'image'});
+    if(card&&card.files)card.files.forEach(f=>_canvas.push({id:uid(),type:'file',url:f.url,name:f.name,fileType:f.type,size:f.size}));
+  }
 
   document.getElementById('modal-title').textContent=card?'Edit Project':'New Project';
   document.getElementById('modal-delete-btn').style.display=card?'':'none';
@@ -4150,20 +4165,13 @@ function openProjectModal(cardId,defaultColId){
   document.getElementById('pf-owner').value=card?card.owner||'':'';
   document.getElementById('pf-date').value=card?card.date||'':'';
   document.getElementById('pf-tags').value=card&&card.tags?card.tags.join(', '):'';
-  document.getElementById('pf-notes').value=card?card.notes||'':'';
 
   const colId=card?card.colId:defaultColId||ab.columns[0].id;
   statusSel.value=colId;
 
-  // Image preview
-  const prev=document.getElementById('pf-img-preview');
-  const clr=document.getElementById('pf-img-clear');
-  if(_modalImgData){prev.src=_modalImgData;prev.style.display='';clr.style.display='';}
-  else{prev.src='';prev.style.display='none';clr.style.display='none';}
-
   modal.style.display='flex';
   document.getElementById('pf-name').focus();
-  renderProjectFilesList();
+  canvasRender();
 }
 
 function closeProjectModal(){document.getElementById('proj-modal').style.display='none';}
@@ -4184,6 +4192,7 @@ function saveProjectModal(){
         card.date=document.getElementById('pf-date').value;
         card.tags=tags;card.notes=document.getElementById('pf-notes').value.trim();
         card.colId=colId;card.imgData=_modalImgData;card.files=_modalFiles;
+      card.canvas=canvasGetData();
       }
     } else {
       KS.cards.push({
@@ -4195,6 +4204,7 @@ function saveProjectModal(){
         tags,notes:document.getElementById('pf-notes').value.trim(),
         imgData:_modalImgData,
         files:_modalFiles,
+        canvas:canvasGetData(),
         createdAt:Date.now(),
       });
     }
@@ -7294,71 +7304,197 @@ function gcalItemToAppEvent(item,feed){
   }catch{return null;}
 }
 
-/* ── Project File Attachments ── */
-let _modalFiles=[]; // [{name, type, url, size, storageRef}] for current edit session
+/* ══════════════════════════════════════════
+   FREEFORM PROJECT CANVAS
+   Blocks: text | image | file
+   Stored in card.canvas[]
+══════════════════════════════════════════ */
+let _canvas=[]; // [{id, type, content, url, name, fileType, size}]
 
-function renderProjectFilesList(){
-  const el=document.getElementById('pf-files-list');
+function canvasRender(){
+  const el=document.getElementById('pf-canvas');
   if(!el)return;
-  if(!_modalFiles.length){el.innerHTML='';return;}
-  el.innerHTML=_modalFiles.map((f,i)=>{
-    const isImg=/^image\//i.test(f.type);
-    const isPdf=f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf');
-    const icon=isPdf?'📄':isImg?'🖼️':'📎';
-    const sizeStr=f.size?`${(f.size/1024).toFixed(0)}KB`:'';
-    return `<div style="display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;background:#f5f2ed;border-radius:7px;border:1px solid #e0ddd6">
-      <span style="font-size:.85rem;flex-shrink:0">${icon}</span>
-      <span style="flex:1;font-size:.68rem;font-weight:500;color:#1a1814;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.name)}">${esc(f.name)}</span>
-      ${sizeStr?`<span style="font-size:.58rem;color:#a09a92;flex-shrink:0">${sizeStr}</span>`:''}
-      <button onclick="viewProjectFile(${i})" style="font-size:.65rem;color:#7a9eb5;background:none;border:none;cursor:pointer;padding:.1rem .3rem;flex-shrink:0;font-weight:600"
-        onmouseover="this.style.color='#1a1814'" onmouseout="this.style.color='#7a9eb5'">View</button>
-      <button onclick="removeProjectFile(${i})" style="font-size:.6rem;color:#a09a92;background:none;border:none;cursor:pointer;padding:.1rem .2rem;flex-shrink:0"
-        onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a09a92'">✕</button>
+  if(!_canvas.length){
+    el.innerHTML=`<div id="canvas-empty" style="color:#c4bfb7;font-size:.72rem;text-align:center;padding:1.25rem;user-select:none">
+      Use the buttons below to add text, images, or files
     </div>`;
-  }).join('');
+    return;
+  }
+  // Save text block content before re-rendering
+  el.querySelectorAll('[data-block-id]').forEach(blockEl=>{
+    const id=blockEl.dataset.blockId;
+    const textEl=blockEl.querySelector('.canvas-text-content');
+    if(textEl){
+      const block=_canvas.find(b=>b.id===id);
+      if(block)block.content=textEl.innerText;
+    }
+  });
+  el.innerHTML='';
+  _canvas.forEach((block,idx)=>{
+    el.appendChild(canvasBuildBlock(block,idx));
+  });
 }
 
-function removeProjectFile(idx){
-  _modalFiles.splice(idx,1);
-  renderProjectFilesList();
+function canvasBuildBlock(block,idx){
+  const wrap=document.createElement('div');
+  wrap.dataset.blockId=block.id;
+  wrap.style.cssText='position:relative;border-radius:7px;transition:box-shadow .12s';
+  wrap.addEventListener('mouseenter',()=>{
+    const rem=wrap.querySelector('.canvas-remove');
+    if(rem)rem.style.opacity='1';
+  });
+  wrap.addEventListener('mouseleave',()=>{
+    const rem=wrap.querySelector('.canvas-remove');
+    if(rem)rem.style.opacity='0';
+  });
+
+  const removeBtn=`<button class="canvas-remove" onclick="canvasRemove('${block.id}')"
+    style="position:absolute;top:4px;right:4px;opacity:0;font-size:.6rem;color:#a09a92;background:#faf9f6;border:1px solid #e0ddd6;border-radius:4px;cursor:pointer;padding:.1rem .3rem;transition:opacity .15s;z-index:2"
+    onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a09a92'">✕</button>`;
+
+  if(block.type==='text'){
+    wrap.innerHTML=`${removeBtn}
+      <div class="canvas-text-content" contenteditable="true" spellcheck="true"
+        style="min-height:2rem;font-size:.8rem;line-height:1.6;color:#1a1814;outline:none;padding:.4rem .5rem;border-radius:6px;background:transparent;white-space:pre-wrap;word-break:break-word"
+        data-placeholder="Type something…"
+        oninput="canvasTextChange('${block.id}',this)"
+        onkeydown="if(event.key==='Enter'&&event.shiftKey){event.preventDefault();canvasAddTextAfter('${block.id}')}"
+      >${esc(block.content||'')}</div>`;
+    // Placeholder styling
+    wrap.querySelector('.canvas-text-content').addEventListener('focus',e=>{
+      if(!e.target.textContent.trim())e.target.style.background='#f5f2ed';
+    });
+    wrap.querySelector('.canvas-text-content').addEventListener('blur',e=>{
+      e.target.style.background='transparent';
+    });
+  } else if(block.type==='image'){
+    wrap.innerHTML=`${removeBtn}
+      <img src="${block.url}" alt="${esc(block.name||'')}"
+        style="width:100%;max-height:320px;object-fit:contain;border-radius:7px;background:#f5f2ed;display:block;cursor:pointer"
+        onclick="openFileViewer('${block.url}','${esc(block.name||'image')}','image/jpeg')"
+        title="Click to view full size"/>`;
+  } else if(block.type==='file'){
+    const isPdf=block.fileType==='application/pdf'||block.name?.toLowerCase().endsWith('.pdf');
+    const icon=isPdf?'📄':'📎';
+    const sizeStr=block.size?`${(block.size/1024).toFixed(0)} KB`:'';
+    wrap.innerHTML=`${removeBtn}
+      <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem .65rem;background:#f0ede8;border-radius:7px;border:1px solid #e0ddd6;cursor:pointer"
+        onclick="openFileViewer('${block.url}','${esc(block.name||'file')}','${block.fileType||''}')">
+        <span style="font-size:1.2rem;flex-shrink:0">${icon}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.72rem;font-weight:600;color:#1a1814;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(block.name||'File')}</div>
+          ${sizeStr?`<div style="font-size:.58rem;color:#a09a92">${sizeStr}${isPdf?' · Click to view PDF':' · Click to view'}</div>`:''}
+        </div>
+        <span style="font-size:.65rem;color:#7a9eb5;font-weight:600;flex-shrink:0">View →</span>
+      </div>`;
+  }
+  return wrap;
 }
 
-async function handleProjectFiles(e){
-  const files=Array.from(e.target.files);
-  if(!files.length)return;
-  const uploadEl=document.getElementById('pf-files-uploading');
-  if(uploadEl)uploadEl.style.display='';
+function canvasTextChange(id,el){
+  const block=_canvas.find(b=>b.id===id);
+  if(block)block.content=el.innerText;
+}
 
+function canvasAddText(){
+  // Flush any open text edits first
+  canvasFlushText();
+  const id=uid();
+  _canvas.push({id,type:'text',content:''});
+  const emptyEl=document.getElementById('canvas-empty');
+  if(emptyEl)emptyEl.remove();
+  const canvasEl=document.getElementById('pf-canvas');
+  if(canvasEl){
+    const block=_canvas[_canvas.length-1];
+    const blockEl=canvasBuildBlock(block,_canvas.length-1);
+    canvasEl.appendChild(blockEl);
+    // Focus the new text block
+    const textEl=blockEl.querySelector('.canvas-text-content');
+    if(textEl){setTimeout(()=>textEl.focus(),50);}
+  }
+}
+
+function canvasAddTextAfter(afterId){
+  canvasFlushText();
+  const idx=_canvas.findIndex(b=>b.id===afterId);
+  const id=uid();
+  const newBlock={id,type:'text',content:''};
+  if(idx>=0)_canvas.splice(idx+1,0,newBlock);
+  else _canvas.push(newBlock);
+  canvasRender();
+  setTimeout(()=>{
+    const el=document.querySelector(`[data-block-id="${id}"] .canvas-text-content`);
+    if(el)el.focus();
+  },50);
+}
+
+function canvasFlushText(){
+  const canvasEl=document.getElementById('pf-canvas');
+  if(!canvasEl)return;
+  canvasEl.querySelectorAll('[data-block-id]').forEach(blockEl=>{
+    const id=blockEl.dataset.blockId;
+    const textEl=blockEl.querySelector('.canvas-text-content');
+    if(textEl){
+      const block=_canvas.find(b=>b.id===id);
+      if(block)block.content=textEl.innerText;
+    }
+  });
+}
+
+async function canvasAddImages(e){
+  const files=Array.from(e.target.files);if(!files.length)return;
+  canvasFlushText();
+  const upEl=document.getElementById('pf-canvas-uploading');
+  if(upEl)upEl.style.display='flex';
   for(const file of files){
-    // For PDFs and docs — store in Firebase Storage
-    if(S.storage&&S.userId&&(file.size<10*1024*1024)){
+    const b64=await fileToBase64(file);
+    const id=uid();
+    _canvas.push({id,type:'image',url:b64,name:file.name,size:file.size});
+  }
+  if(upEl)upEl.style.display='none';
+  canvasRender();
+  e.target.value='';
+}
+
+async function canvasAddFiles(e){
+  const files=Array.from(e.target.files);if(!files.length)return;
+  canvasFlushText();
+  const upEl=document.getElementById('pf-canvas-uploading');
+  if(upEl)upEl.style.display='flex';
+  for(const file of files){
+    let url='';
+    if(S.storage&&S.userId){
       try{
         const path=`users/${S.userId}/project-files/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
         const ref=S.storage.ref(path);
         await ref.put(file);
-        const url=await ref.getDownloadURL();
-        _modalFiles.push({name:file.name,type:file.type,url,size:file.size,storageRef:path});
-      }catch(err){
-        // Fallback to base64 for small files
-        if(file.size<2*1024*1024){
-          const b64=await fileToBase64(file);
-          _modalFiles.push({name:file.name,type:file.type,url:b64,size:file.size});
-        } else {
-          alert(`"${file.name}" is too large to store. Max 2MB for files without Firebase Storage.`);
-        }
+        url=await ref.getDownloadURL();
+      }catch{
+        if(file.size<3*1024*1024)url=await fileToBase64(file);
       }
-    } else if(file.size<2*1024*1024){
-      // Small files — base64
-      const b64=await fileToBase64(file);
-      _modalFiles.push({name:file.name,type:file.type,url:b64,size:file.size});
+    } else if(file.size<3*1024*1024){
+      url=await fileToBase64(file);
     } else {
-      alert(`"${file.name}" is too large (${(file.size/1024/1024).toFixed(1)}MB). Max 10MB.`);
+      alert(`"${file.name}" too large for local storage. Firebase Storage needed for files over 3MB.`);
+      continue;
     }
+    const id=uid();
+    _canvas.push({id,type:'file',url,name:file.name,fileType:file.type,size:file.size});
   }
-
-  if(uploadEl)uploadEl.style.display='none';
-  renderProjectFilesList();
+  if(upEl)upEl.style.display='none';
+  canvasRender();
   e.target.value='';
+}
+
+function canvasRemove(id){
+  _canvas=_canvas.filter(b=>b.id!==id);
+  canvasRender();
+}
+
+function canvasGetData(){
+  canvasFlushText();
+  // Remove empty text blocks
+  return _canvas.filter(b=>!(b.type==='text'&&!b.content?.trim()));
 }
 
 function fileToBase64(file){
@@ -7370,11 +7506,7 @@ function fileToBase64(file){
   });
 }
 
-function viewProjectFile(idx){
-  const f=_modalFiles[idx];
-  if(!f)return;
-  openFileViewer(f.url,f.name,f.type);
-}
+window.addEventListener('DOMContentLoaded',initFirebase);
 
 function openFileViewer(url,name,type){
   const modal=document.getElementById('file-viewer-modal');
