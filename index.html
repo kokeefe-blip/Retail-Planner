@@ -162,7 +162,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
 .hcal-ical.hcal-evt{
   border-radius:50%!important;
 }
-  background:#d4d0c8;
+  background:transparent;
   border-radius:3px!important;
   color:#1a1814;
   -webkit-print-color-adjust:exact;
@@ -2372,18 +2372,28 @@ function renderHomeGrid(){
       const dk=`${y}-${String(m+1).padStart(2,'0')}-${String(n).padStart(2,'0')}`;
       const evts=S.events.filter(e=>e.date===dk&&!e._fromIcal);   // game events only → rings
       const icalEvts=S.events.filter(e=>e.date===dk&&e._fromIcal); // iCal events → squares
-      const isDue=KS.cards.some(c=>c.date===dk);
+      const dueCards=KS.cards.filter(c=>c.date===dk);
+      const isDue=dueCards.length>0;
+      // Pick highest priority color for the square
+      const PROJ_PRIO_COLOR={'High':'#d4856a','Medium':'#c9a84c','Moderate':'#c9a84c','Low':'#a09a92','':'#c4bfb7'};
+      const PRIO_RANK={'High':0,'Medium':1,'Moderate':1,'Low':2,'':3};
+      let projColor='#c4bfb7';
+      if(isDue){
+        const top=dueCards.sort((a,b)=>(PRIO_RANK[a.priority||'']??3)-(PRIO_RANK[b.priority||'']??3))[0];
+        projColor=PROJ_PRIO_COLOR[top.priority||'']||'#c4bfb7';
+      }
       // Build class and style
       let cellCls=`hcal-cell ${cls}`;
       let cellStyle='';
-      if(isDue&&!cls)cellCls+=' hcal-proj';
+      if(isDue&&!cls){
+        cellCls+=' hcal-proj';
+        cellStyle=`background:${projColor}28;border:1.5px solid ${projColor}90`;
+      }
       if(icalEvts.length&&!evts.length&&!cls){
-        // iCal event on this day — colored square
         cellCls+=' hcal-ical';
         cellStyle=`background:${icalEvts[0].colorHex}30;border:1.5px solid ${icalEvts[0].colorHex}`;
       }
       if(evts.length&&!cls){
-        // Game event — circle ring (may override square)
         cellCls+=' hcal-evt';
         cellStyle=`border:1.5px solid ${getEvtGroupColor(evts[0].team)||evts[0].colorHex}`;
       }
@@ -3376,6 +3386,8 @@ function applyProjectReminders(date){
   if(!el)return;
   const key=fmtKey(date);
 
+  const PRIO_COLOR={'High':'#d4856a','Medium':'#c9a84c','Moderate':'#c9a84c','Low':'#a09a92','':'#c4bfb7'};
+
   // Projects due ON this exact day
   const dueToday=KS.cards.filter(c=>c.date===key);
 
@@ -3385,28 +3397,45 @@ function applyProjectReminders(date){
   if(!dueToday.length&&!reminders.length){el.style.display='none';return;}
 
   el.style.display='block';
-
   let html='';
 
-  // Due today — shown first, in the board's color
+  // Due today — full card info: name, owner, due date, priority color
   dueToday.forEach(card=>{
+    const pColor=PRIO_COLOR[card.priority||'']||'#c4bfb7';
     const board=KS.boards.find(b=>b.id===card.boardId);
-    const color=board?board.color:teamColorFor(card.team);
-    html+=`<div class="proj-reminder-item">
-      <span class="proj-reminder-bullet" style="color:${color}">■</span>
-      <span class="proj-reminder-text"><strong style="font-weight:700">${esc(card.name)}</strong></span>
-      <span class="proj-reminder-due" style="color:${color};font-weight:600">DUE TODAY</span>
+    const boardName=board?board.name:'';
+    let dueFmt='';
+    try{const d=parseKey(card.date);dueFmt=`${MONS_SHORT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;}catch{}
+    html+=`<div style="display:flex;align-items:stretch;gap:.5rem;padding:.3rem .5rem;border-radius:6px;background:${pColor}12;border-left:3px solid ${pColor};cursor:pointer"
+      onclick="showProjects();setTimeout(()=>openBoard('${card.boardId}'),50)">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">
+          <span style="font-size:.72rem;font-weight:700;color:#1a1814">${esc(card.name)}</span>
+          <span style="font-size:.58rem;font-weight:700;color:${pColor};background:${pColor}20;border-radius:3px;padding:.05rem .3rem">${card.priority||'No priority'}</span>
+          <span style="font-size:.6rem;font-weight:700;color:${pColor}">DUE TODAY</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-top:.15rem;flex-wrap:wrap">
+          ${boardName?`<span style="font-size:.6rem;color:#a09a92">${esc(boardName)}</span>`:''}
+          ${card.owner?`<span style="font-size:.6rem;color:#6a6460">👤 ${esc(card.owner)}</span>`:''}
+          ${dueFmt?`<span style="font-size:.6rem;color:#a09a92">📅 ${dueFmt}</span>`:''}
+        </div>
+      </div>
     </div>`;
   });
 
-  // Advance reminders (7d / 3d)
+  // Advance reminders (7d / 3d) — compact
   reminders.forEach(r=>{
     const daysOut=r.subject.includes('7 days')?7:3;
     const urgColor=daysOut===3?'#d4856a':'#c9a84c';
-    html+=`<div class="proj-reminder-item">
-      <span class="proj-reminder-bullet" style="color:${urgColor}">•</span>
-      <span class="proj-reminder-text"><strong style="font-weight:600">${r.projName}</strong></span>
-      <span class="proj-reminder-due" style="color:${urgColor}">due ${r.dueStr} · ${daysOut}d</span>
+    const card=KS.cards.find(c=>c.name===r.projName);
+    const owner=card?card.owner:'';
+    let dueFmt='';
+    try{if(card){const d=parseKey(card.date);dueFmt=`${MONS_SHORT[d.getMonth()]} ${d.getDate()}`;}}catch{}
+    html+=`<div style="display:flex;align-items:center;gap:.4rem;padding:.25rem .5rem;border-radius:6px;border-left:3px solid ${urgColor}80">
+      <span style="font-size:.65rem;color:${urgColor}">•</span>
+      <span style="font-size:.68rem;font-weight:600;color:#1a1814;flex:1">${esc(r.projName)}</span>
+      ${owner?`<span style="font-size:.58rem;color:#a09a92">👤 ${esc(owner)}</span>`:''}
+      <span style="font-size:.58rem;color:${urgColor};font-weight:600">${dueFmt} · ${daysOut}d</span>
     </div>`;
   });
 
