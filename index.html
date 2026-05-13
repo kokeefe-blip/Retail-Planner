@@ -2370,35 +2370,51 @@ function renderHomeGrid(){
     for(let n=1;n<=d;n++){
       const cls=isToday(new Date(y,m,n))?'hcal-today':'';
       const dk=`${y}-${String(m+1).padStart(2,'0')}-${String(n).padStart(2,'0')}`;
-      const evts=S.events.filter(e=>e.date===dk&&!e._fromIcal);   // game events only → rings
-      const icalEvts=S.events.filter(e=>e.date===dk&&e._fromIcal); // iCal events → squares
+      const evts=S.events.filter(e=>e.date===dk&&!e._fromIcal);
+      const icalEvts=S.events.filter(e=>e.date===dk&&e._fromIcal);
       const dueCards=KS.cards.filter(c=>c.date===dk);
       const isDue=dueCards.length>0;
-      // Pick highest priority color for the square
       const PROJ_PRIO_COLOR={'High':'#d4856a','Medium':'#c9a84c','Moderate':'#c9a84c','Low':'#a09a92','':'#c4bfb7'};
       const PRIO_RANK={'High':0,'Medium':1,'Moderate':1,'Low':2,'':3};
       let projColor='#c4bfb7';
       if(isDue){
-        const top=dueCards.sort((a,b)=>(PRIO_RANK[a.priority||'']??3)-(PRIO_RANK[b.priority||'']??3))[0];
+        const top=[...dueCards].sort((a,b)=>(PRIO_RANK[a.priority||'']??3)-(PRIO_RANK[b.priority||'']??3))[0];
         projColor=PROJ_PRIO_COLOR[top.priority||'']||'#c4bfb7';
       }
-      // Build class and style
+
       let cellCls=`hcal-cell ${cls}`;
       let cellStyle='';
-      if(isDue&&!cls){
+      const hasEvt=evts.length>0&&!cls;
+      const hasIcal=icalEvts.length>0&&!cls;
+
+      if(isDue&&!cls&&!hasEvt){
+        // Project only → plain colored square
         cellCls+=' hcal-proj';
         cellStyle=`background:${projColor}28;border:1.5px solid ${projColor}90`;
       }
-      if(icalEvts.length&&!evts.length&&!cls){
+      if(isDue&&!cls&&hasEvt){
+        // Both project + event → circle ring in event color, priority tint as background fill
+        cellCls+=' hcal-evt';
+        const evtColor=getEvtGroupColor(evts[0].team)||evts[0].colorHex;
+        cellStyle=`background:${projColor}30;border:1.5px solid ${evtColor}`;
+      }
+      if(!isDue&&hasIcal&&!hasEvt){
         cellCls+=' hcal-ical';
         cellStyle=`background:${icalEvts[0].colorHex}30;border:1.5px solid ${icalEvts[0].colorHex}`;
       }
-      if(evts.length&&!cls){
+      if(!isDue&&hasEvt){
         cellCls+=' hcal-evt';
         cellStyle=`border:1.5px solid ${getEvtGroupColor(evts[0].team)||evts[0].colorHex}`;
       }
+
+      // Build tooltip
+      const tipParts=[
+        ...evts.map(e=>[e.team,e.opponent?`vs ${e.opponent}`:'',e.promotion].filter(Boolean).join(' · ')),
+        ...icalEvts.map(e=>[e._feedName||e.team,e.subject].filter(Boolean).join(': ')),
+        ...dueCards.map(c=>`📌 ${c.name}${c.owner?' · '+c.owner:''}${c.priority?' ('+c.priority+')':''}`)
+      ];
+      const tip=tipParts.join('\n');
       const styleAttr=cellStyle?` style="${cellStyle}"`:'';
-      const tip=[...evts,...icalEvts].map(e=>[e._feedName||e.team,e.opponent?`vs ${e.opponent}`:'',e.promotion].filter(Boolean).join(' · ')).join('\n');
       html+=`<div class="${cellCls}"${styleAttr} onclick="navigateTo(new Date(${y},${m},${n}))"${tip?` title="${tip.replace(/"/g,'&quot;')}"`:''} >${n}</div>`;
     }
     for(let i=1;i<=trail;i++) html+=`<div class="hcal-cell hcal-other">${i}</div>`;
