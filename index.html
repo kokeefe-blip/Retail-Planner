@@ -3691,41 +3691,90 @@ function renderBoardGrid(){
   grid.appendChild(addCol);
 }
 
+const PRIORITY_RANK={'High':0,'Medium':1,'Moderate':1,'Low':2,'':3};
+
+function getTopTasks(boardId, today, n=3){
+  const cards=boardCards(boardId).filter(c=>c.name);
+  // Separate past-due, upcoming with dates, no-date
+  const parsed=cards.map(c=>{
+    let d=null;
+    if(c.date){try{d=parseKey(c.date);}catch{}}
+    const diffDays=d?Math.round((d-today)/(1000*60*60*24)):null;
+    const overdue=diffDays!==null&&diffDays<0;
+    const pRank=PRIORITY_RANK[c.priority||'']??3;
+    return{card:c,d,diffDays,overdue,pRank};
+  });
+
+  // Sort: overdue first (soonest), then by priority, then by date, then undated by priority
+  parsed.sort((a,b)=>{
+    // Past due floats to top, sorted by how overdue (most overdue first)
+    if(a.overdue&&!b.overdue)return -1;
+    if(!a.overdue&&b.overdue)return 1;
+    if(a.overdue&&b.overdue)return a.diffDays-b.diffDays; // most overdue first
+
+    // Both have dates — sort by priority first, then date
+    if(a.d&&b.d){
+      if(a.pRank!==b.pRank)return a.pRank-b.pRank;
+      return a.d-b.d;
+    }
+    // Dated before undated
+    if(a.d&&!b.d)return -1;
+    if(!a.d&&b.d)return 1;
+    // Both undated — sort by priority
+    return a.pRank-b.pRank;
+  });
+
+  return parsed.slice(0,n);
+}
+
 function buildBoardCard(board, today){
-  const cards=boardCards(board.id);
-  const counts={};board.columns.forEach(c=>{counts[c.id]=0;});
-  cards.forEach(c=>{if(counts[c.colId]!==undefined)counts[c.colId]++;});
-  const nextDue=boardNextDue(board.id);
+  const topTasks=getTopTasks(board.id, today, 3);
+  const totalCards=boardCards(board.id).length;
 
   const div=document.createElement('div');
   div.className='board-card';
   div.dataset.boardId=board.id;
   div.onclick=()=>openBoard(board.id);
 
+  const priorityColors={High:'#d4856a',Medium:'#c9a84c',Moderate:'#c9a84c',Low:'#a09a92','':`#c4bfb7`};
+  const priorityDots={High:'●',Medium:'●',Moderate:'●',Low:'●','':'○'};
+
   let html=`<div class="board-card-accent" style="background:${board.color}"></div>`;
-  html+=`<div class="board-card-name">${esc(board.name)}</div>`;
+  html+=`<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:.5rem">
+    <div class="board-card-name" style="margin-bottom:0">${esc(board.name)}</div>
+    <span style="font-size:.58rem;color:#a09a92;font-weight:500;flex-shrink:0;margin-left:.4rem">${totalCards} task${totalCards!==1?'s':''}</span>
+  </div>`;
 
-  board.columns.forEach(col=>{
-    const cnt=counts[col.id]||0;
-    html+=`<div class="board-stat">
-      <span class="board-stat-label">${esc(col.name)}</span>
-      <div style="display:flex;align-items:center;gap:.5rem;flex:1;margin-left:.75rem">
-        <div class="dash-bar-wrap"><div class="dash-bar" style="width:100%;background:#e8e4dc"></div></div>
-        <span class="board-stat-val">${cnt}</span>
-      </div>
-    </div>`;
-  });
-
-  if(nextDue){
-    try{
-      const diff=Math.round((nextDue.d-today)/(1000*60*60*24));
-      const urgency=diff<=2?'background:#fee2e2;color:#b91c1c':diff<=7?'background:#fef3c7;color:#92400e':'background:#f0ede8;color:#6a6460';
-      html+=`<div class="board-next" style="${urgency}">
-        <div style="font-size:.52rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.15rem">Next Due</div>
-        <div style="font-size:.72rem;font-weight:600">${esc(nextDue.card.name)}</div>
-        <div style="font-size:.6rem;opacity:.7">${MONS_SHORT[nextDue.d.getMonth()]} ${nextDue.d.getDate()}${diff===0?' — today':diff===1?' — tomorrow':` — ${diff}d away`}</div>
+  if(!topTasks.length){
+    html+=`<div style="font-size:.65rem;color:#c4bfb7;padding:.5rem 0;text-align:center">No tasks yet</div>`;
+  } else {
+    html+=`<div style="display:flex;flex-direction:column;gap:.3rem">`;
+    topTasks.forEach(({card,d,diffDays,overdue,pRank})=>{
+      const pColor=priorityColors[card.priority||'']||'#c4bfb7';
+      const pDot=priorityDots[card.priority||'']||'○';
+      let dateTag='';
+      if(overdue){
+        const daysAgo=Math.abs(diffDays);
+        dateTag=`<span style="font-size:.55rem;font-weight:700;color:#b91c1c;background:#fee2e2;border-radius:3px;padding:.05rem .3rem;flex-shrink:0">${daysAgo===0?'today':daysAgo+'d over'}</span>`;
+      } else if(d){
+        const isToday=diffDays===0,isTomorrow=diffDays===1;
+        const urgColor=diffDays<=2?'#92400e':diffDays<=7?'#6B5A1E':'#a09a92';
+        const urgBg=diffDays<=2?'#fef3c7':diffDays<=7?'#fef9ec':'transparent';
+        const label=isToday?'today':isTomorrow?'tomorrow':`${MONS_SHORT[d.getMonth()]} ${d.getDate()}`;
+        dateTag=`<span style="font-size:.55rem;color:${urgColor};background:${urgBg};border-radius:3px;padding:.05rem .3rem;flex-shrink:0;white-space:nowrap">${label}</span>`;
+      }
+      html+=`<div style="display:flex;align-items:center;gap:.35rem;padding:.25rem 0;border-bottom:.5px solid #f0ede8">
+        <span style="color:${pColor};font-size:.6rem;flex-shrink:0;line-height:1">${pDot}</span>
+        <span style="font-size:.68rem;color:#1a1814;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(card.name)}">${esc(card.name)}</span>
+        ${dateTag}
       </div>`;
-    }catch(e){}
+    });
+    html+=`</div>`;
+
+    // Show how many more tasks are not displayed
+    if(totalCards>3){
+      html+=`<div style="font-size:.6rem;color:#a09a92;text-align:center;margin-top:.35rem;padding-top:.35rem;border-top:.5px solid #f0ede8">+${totalCards-3} more</div>`;
+    }
   }
 
   html+=`<div style="position:absolute;top:.75rem;right:.75rem" onclick="event.stopPropagation();openBoardModal('${board.id}')">
