@@ -1108,6 +1108,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:.4;cursor:pointer}
       <div class="flex items-center gap-2 mb-4 flex-wrap no-print">
         <span class="section-label">Filter:</span>
         <div id="proj-team-filters" class="flex gap-1.5 flex-wrap"></div>
+        <div id="proj-tag-filters" class="flex gap-1.5 flex-wrap"></div>
         <select id="proj-priority-filter" onchange="renderKanban()" class="text-xs text-stone-500 border border-stone-200 rounded-md px-2 py-1 bg-white" style="font-family:inherit">
           <option value="">All priorities</option>
           <option value="High">High</option>
@@ -2815,6 +2816,7 @@ const HIST={
   rows:[],      // {year,day,date,eventTag,team,opponent,orders,netSales,units,aov,avgBasket}
   filterYear:'all',
   filterTeam:'all',
+  filterTag:null,
 };
 
 const IC={
@@ -3885,9 +3887,9 @@ function openBoard(boardId){
   KS.activeBoardId=boardId;
   KS.projectView='kanban';
   KS.filterTeam=null;
+  KS.filterTag=null;
   const pf=document.getElementById('proj-priority-filter');
   if(pf)pf.value='';
-  const board=activeBoard();
   document.getElementById('proj-home').style.display='none';
   document.getElementById('proj-board').style.display='';
   document.getElementById('board-label').textContent=board.name;
@@ -4080,10 +4082,24 @@ function renderKanban(){
     }).join('');
   }
 
+  // Tag filter badges — all unique tags across board cards
+  const allTags=[...new Set(boardCards(ab.id).flatMap(c=>c.tags||[]).filter(Boolean))].sort();
+  const tagEl=document.getElementById('proj-tag-filters');
+  if(tagEl){
+    tagEl.innerHTML=allTags.map(tag=>{
+      const active=KS.filterTag===tag;
+      return `<span onclick="toggleTagFilter('${tag}')" class="team-badge"
+        style="background:${active?'#1a181430':'#1a181408'};color:#6a6460;border:1px solid ${active?'#1a181480':'#e0ddd6'};${active?'font-weight:700':''}">
+        #${tag}
+      </span>`;
+    }).join('');
+  }
+
   ab.columns.forEach(col=>{
     let cards=KS.cards.filter(c=>c.boardId===ab.id&&c.colId===col.id);
     if(KS.filterTeam)cards=cards.filter(c=>c.team===KS.filterTeam);
     if(filterPri)cards=cards.filter(c=>c.priority===filterPri);
+    if(KS.filterTag)cards=cards.filter(c=>c.tags&&c.tags.includes(KS.filterTag));
     cards.sort((a,b)=>['High','Medium','Low',''].indexOf(a.priority)-['High','Medium','Low',''].indexOf(b.priority));
 
     const colEl=document.createElement('div');
@@ -4373,6 +4389,11 @@ function addProjectColumn(){
 }
 
 /* ── Filters ── */
+function toggleTagFilter(tag){
+  KS.filterTag=KS.filterTag===tag?null:tag;
+  renderKanban();
+}
+
 function toggleTeamFilter(team){
   KS.filterTeam=KS.filterTeam===team?null:team;
   renderKanban();
@@ -4380,6 +4401,7 @@ function toggleTeamFilter(team){
 
 function clearProjectFilters(){
   KS.filterTeam=null;
+  KS.filterTag=null;
   document.getElementById('proj-priority-filter').value='';
   renderKanban();
 }
